@@ -1,0 +1,48 @@
+name: CD
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: production
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ github.workspace }}
+
+    env:
+      COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      SERVICE_DESCRIPTION: ${{ vars.SERVICE_DESCRIPTION }}
+      PORT: ${{ vars.PORT }}
+      BACKEND_CORS_ORIGINS: ${{ vars.BACKEND_CORS_ORIGINS }}
+      POSTGRES_DB: ${{ vars.POSTGRES_DB }}
+      POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
+      POSTGRES_USER: ${{ vars.POSTGRES_USER }}
+      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      REDIS_URL: ${{ vars.REDIS_URL }}
+      RABBITMQ_HOST: ${{ vars.RABBITMQ_HOST }}
+      RABBITMQ_VHOST: ${{ vars.RABBITMQ_VHOST }}
+      RABBITMQ_USER: ${{ vars.RABBITMQ_USER }}
+      RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+      SECRET_KEY: ${{ secrets.SECRET_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Stop previous stack
+        run: docker compose -f docker-compose.yml down || true
+
+      - name: Deploy stack
+        run: docker compose -f docker-compose.yml up -d --build --wait
+
+      - name: Run database migrations
+        run: docker compose -f docker-compose.yml exec -T api alembic upgrade head

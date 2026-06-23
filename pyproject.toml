@@ -6,4 +6,75 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.135.1",
+    "uvicorn[standard]>=0.41.0",
+    "sqlalchemy[asyncio]>=2.0.48",
+    "pydantic-settings>=2.13.1",
+    "python-json-logger>=3.2.1",
+    "psycopg2-binary>=2.9.11",
+    "asyncpg>=0.31.0",
+    "alembic>=1.18.4",
+    "celery>=5.6.3",
+    "aio-pika>=9.6.2",
+    "redis[hiredis]>=5.0.0",
+    "slowapi>=0.1.9",
+    "email-validator>=2.3.0",
+    "argon2-cffi>=25.1.0",
+]
+
+[dependency-groups]
+dev = [
+    "anyio>=4.13.0",
+    "asgi-lifespan>=2.1.0",
+    "faker>=40.12.0",
+    "freezegun>=1.5.5",
+    "httpx>=0.28.1",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-env>=1.6.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+indent-width = 4
+extend-exclude = ["migrations/versions/*.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "TID"]
+fixable = ["ALL"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["E402"]
+"tests/**/*.py" = ["S101"]
+"**/test_*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "lf"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+    "security: marks tests that verify security-related behavior (deselect with '-m \"not security\"')",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/__init__.py",
+    "migrations/*",
+    "app/main.py",
+]
+
+[tool.coverage.report]
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

@@ -1,0 +1,359 @@
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select
+
+from app.core.config import settings
+from app.core.exceptions import (
+    CurrentPasswordInvalidError,
+    EmailAlreadyExistsError,
+    EmailNotVerifiedError,
+)
+from app.core.security import hash_token, verify_password
+from app.models.domain import User, UserRole
+from app.schemas.responses import UserUpdateResponse
+from app.schemas.verification import VerificationActionType, VerificationTokenData
+
+
+@pytest.mark.anyio
+class TestUpdateUserMe:
+    async def test_success_update_email(
+        self,
+        http_client: AsyncClient,
+        db_session,
+        create_test_user,
+        create_auth_token,
+        redis_client,
+        valid_test_password,
+        generate_test_email,
+    ) -> None:
+        user = await create_test_user(password=valid_test_password)
+        active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
+        headers = {"Authorization": f"Bearer {active_token}"}
+
+        new_email = generate_test_email(prefix="update")
+
+        raw_token = "E3fM6pR9qS2vN5wT8yU1zA4bD7cF0eG3hJ6kL9mP2xQ"
+        token_hash = hash_token(raw_token)
+        token_key = f"vtoken:{token_hash}"
+        token_data = VerificationTokenData(
+            email=new_email,
+            action_type=VerificationActionType.EMAIL_CHANGE,
+        )
+        await redis_client.set(
+            token_key,
+            token_data.model_dump_json(),
+            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+        )
+
+        payload = {"email": new_email, "verification_token": raw_token}
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 200
+        data = UserUpdateResponse(**response.json())
+        assert data.email == new_email
+        assert data.updated_at is not None
+
+        result = await db_session.execute(select(User).where(User.email == new_email))
+        updated_user = result.scalar_one()
+        assert updated_user.email == new_email
+        assert updated_user.updated_at is not None
+
+        hashed = hash_token(active_token)
+        revoked = await redis_client.get(f"tkn:{hashed}")
+        assert revoked is None
+
+        verification_exists = await redis_client.exists(token_key)
+        assert verification_exists == 0
+
+    async def test_success_update_password(
+        self,
+        http_client: AsyncClient,
+        db_session,
+        create_test_user,
+        create_auth_token,
+        redis_client,
+        valid_test_password,
+        new_valid_test_password,
+    ) -> None:
+        password = valid_test_password
+        user = await create_test_user(password=password)
+        active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
+        headers = {"Authorization": f"Bearer {active_token}"}
+        new_password = new_valid_test_password
+
+        payload = {
+            "new_password": new_password,
+            "current_password": password,
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 200
+        data = UserUpdateResponse(**response.json())
+        assert data.updated_at is not None
+
+        result = await db_session.execute(select(User).where(User.id == user.id))
+        updated_user = result.scalar_one()
+        assert verify_password(new_password, updated_user.password_hash)
+        assert not verify_password(password, updated_user.password_hash)
+        assert updated_user.updated_at is not None
+
+        hashed = hash_token(active_token)
+        revoked = await redis_client.get(f"tkn:{hashed}")
+        assert revoked is None
+
+    async def test_success_update_both_email_and_password(
+        self,
+        http_client: AsyncClient,
+        db_session,
+        redis_client,
+        create_test_user,
+        create_auth_token,
+        valid_test_password,
+        new_valid_test_password,
+        generate_test_email,
+    ) -> None:
+        password = valid_test_password
+        user = await create_test_user(password=password)
+        active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
+        headers = {"Authorization": f"Bearer {active_token}"}
+        new_email = generate_test_email(prefix="update")
+        new_password = new_valid_test_password
+
+        raw_token = "B0thUpd4t3T0k3nF0rT3st1ngPurp0s3s0n1y123456"
+        token_hash = hash_token(raw_token)
+        token_key = f"vtoken:{token_hash}"
+        token_data = VerificationTokenData(
+            email=new_email,
+            action_type=VerificationActionType.EMAIL_CHANGE,
+        )
+        await redis_client.set(
+            token_key,
+            token_data.model_dump_json(),
+            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+        )
+
+        payload = {
+            "email": new_email,
+            "new_password": new_password,
+            "current_password": password,
+            "verification_token": raw_token,
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 200
+        data = UserUpdateResponse(**response.json())
+        assert data.email == new_email
+        assert data.updated_at is not None
+
+        result = await db_session.execute(select(User).where(User.id == user.id))
+        updated_user = result.scalar_one()
+        assert updated_user.email == new_email
+        assert verify_password(new_password, updated_user.password_hash)
+        assert not verify_password(password, updated_user.password_hash)
+        assert updated_user.updated_at is not None
+
+        hashed = hash_token(active_token)
+        revoked = await redis_client.get(f"tkn:{hashed}")
+        assert revoked is None
+
+        verification_exists = await redis_client.exists(token_key)
+        assert verification_exists == 0
+
+    @pytest.mark.parametrize(
+        "invalid_email",
+        ["invalid", "test@", ""],
+    )
+    async def test_validation_errors_invalid_email(
+        self,
+        http_client: AsyncClient,
+        invalid_email: str,
+        authenticated_headers,
+    ) -> None:
+        headers = await authenticated_headers()
+        payload = {
+            "email": invalid_email,
+            "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+        assert response.status_code == 422
+        data = response.json()
+        assert isinstance(data.get("detail"), list)
+
+    @pytest.mark.parametrize(
+        "invalid_password",
+        ["short", ""],
+    )
+    async def test_validation_errors_invalid_password(
+        self,
+        http_client: AsyncClient,
+        invalid_password: str,
+        authenticated_headers,
+        valid_test_password,
+    ) -> None:
+        headers = await authenticated_headers()
+        payload = {"new_password": invalid_password, "current_password": valid_test_password}
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+        assert response.status_code == 422
+        data = response.json()
+        assert isinstance(data.get("detail"), list)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {},
+            {"verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"},
+        ],
+    )
+    async def test_validation_errors_missing_fields(
+        self,
+        http_client: AsyncClient,
+        payload: dict,
+        authenticated_headers,
+    ) -> None:
+        headers = await authenticated_headers()
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+        assert response.status_code == 422
+        data = response.json()
+        assert isinstance(data.get("detail"), list)
+
+    async def test_business_error_current_password_invalid(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        valid_test_password,
+        new_valid_test_password,
+    ) -> None:
+        headers = await authenticated_headers()
+        wrong_password = "WrongP@ssw0rd123!"
+        new_password = new_valid_test_password
+
+        payload = {
+            "new_password": new_password,
+            "current_password": wrong_password,
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 400
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 400
+        assert data["detail"] == CurrentPasswordInvalidError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
+
+    async def test_business_error_email_not_verified(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        generate_test_email,
+    ) -> None:
+        headers = await authenticated_headers()
+        new_email = generate_test_email(prefix="update")
+
+        payload = {
+            "email": new_email,
+            "verification_token": "invalid_token_not_in_redis_1234567890123456",
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 400
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 400
+        assert data["detail"] == EmailNotVerifiedError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
+
+    async def test_business_error_email_not_verified_false(
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        authenticated_headers,
+        generate_test_email,
+    ) -> None:
+        headers = await authenticated_headers()
+        new_email = generate_test_email(prefix="update")
+
+        token_hash = hash_token("wrong_action_token_123456789012345678901234")
+        token_key = f"vtoken:{token_hash}"
+        token_data = VerificationTokenData(
+            email=new_email,
+            action_type=VerificationActionType.PASSWORD_RESET,
+        )
+        await redis_client.set(
+            token_key,
+            token_data.model_dump_json(),
+            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+        )
+
+        payload = {
+            "email": new_email,
+            "verification_token": "wrong_action_token_123456789012345678901234",
+        }
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 400
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 400
+        assert data["detail"] == EmailNotVerifiedError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
+
+    async def test_business_error_email_already_exists(
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        authenticated_headers,
+        create_test_user,
+        generate_test_email,
+        valid_test_password,
+    ) -> None:
+        headers = await authenticated_headers()
+        existing_email = generate_test_email(prefix="conflict")
+
+        await create_test_user(email=existing_email, password=valid_test_password)
+
+        raw_token = "C0nf1ictT0k3nF0rT3st1ngPurp0s3s0n1y12345678"
+        token_hash = hash_token(raw_token)
+        token_key = f"vtoken:{token_hash}"
+        token_data = VerificationTokenData(
+            email=existing_email,
+            action_type=VerificationActionType.EMAIL_CHANGE,
+        )
+        await redis_client.set(
+            token_key,
+            token_data.model_dump_json(),
+            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+        )
+
+        payload = {"email": existing_email, "verification_token": raw_token}
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 409
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 409
+        assert data["detail"] == EmailAlreadyExistsError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
+
+    async def test_validation_error_password_change_without_current_password(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        new_valid_test_password,
+    ) -> None:
+        headers = await authenticated_headers()
+        new_password = new_valid_test_password
+
+        payload = {"new_password": new_password}
+        response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
+
+        assert response.status_code == 422
+        data = response.json()
+        assert isinstance(data.get("detail"), list)

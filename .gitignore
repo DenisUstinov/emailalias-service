@@ -7,3 +7,8 @@ __pycache__/
 # Test coverage
 .coverage
 
+# Project context
+.cats
+
+# Project logs
+*.log

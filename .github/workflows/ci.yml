@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - temp/**
+  workflow_dispatch:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Create .env from example
+        run: cp .env.example .env
+
+      - name: Install CI dependencies
+        run: |
+          if ! command -v hadolint >/dev/null 2>&1; then
+            sudo curl -sL --retry 3 --retry-delay 5 --retry-all-errors \
+              https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 \
+              -o /usr/local/bin/hadolint
+            sudo chmod +x /usr/local/bin/hadolint
+          fi
+          if ! command -v uv >/dev/null 2>&1; then
+            curl -LsSf --retry 3 --retry-delay 5 --retry-all-errors https://astral.sh/uv/install.sh | sh
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          fi
+
+      - name: Lint
+        run: uv run pre-commit run --all-files
+
+      - name: Build and start services
+        run: docker compose up -d --build --wait
+
+      - name: Coverage
+        run: docker compose exec -e TESTING=true api uv run pytest -v --cov=app --cov-report=term-missing -p no:xdist
