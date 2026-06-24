@@ -6,6 +6,26 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.domain import UserRole
 
 
+class DomainResponse(BaseModel):
+    id: UUID = Field(..., description="Unique identifier of the domain in the local database")
+    fqdn: str = Field(..., description="Fully qualified domain name used for mailbox creation")
+    is_default: bool = Field(
+        ...,
+        description="Flag indicating if this is the default domain for free users",
+    )
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "fqdn": "example.com",
+                "is_default": True,
+            }
+        },
+    )
+
+
 class TokenCreateResponse(BaseModel):
     access_token: str = Field(..., description="Opaque session token")
     token_type: str = Field(default="bearer", description="Token type")

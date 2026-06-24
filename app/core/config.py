@@ -43,7 +43,6 @@ class Settings(BaseSettings):
 
     # Rate Limiting
     RATE_LIMIT_DEFAULT: str = "60/minute"
-
     RATE_LIMIT_TOKEN_CREATION: str = "5/minute"
     RATE_LIMIT_VERIFICATION_CREATION: str = "3/minute"
     RATE_LIMIT_VERIFICATION_CONFIRMATION: str = "5/minute"
@@ -51,6 +50,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_USER_UPDATE: str = "10/minute"
     RATE_LIMIT_USER_DELETION: str = "3/minute"
     RATE_LIMIT_PASSWORD_UPDATE: str = "10/minute"
+    RATE_LIMIT_DOMAINS: str = "60/minute"
 
     # Testing
     TESTING: bool = False

@@ -29,6 +29,7 @@ pytest_plugins = [
     "tests.fixtures.email",
     "tests.fixtures.mocks",
     "tests.fixtures.deterministic",
+    "tests.fixtures.rate_limits",
 ]
 
 
