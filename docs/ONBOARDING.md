@@ -43,6 +43,6 @@ make migrate
 Если файлов миграций нет в репозитории, вначале создайте миграцию и примените ее:
 
 ```bash
-make migrate-new Initial tables
+make migrate-new
 # Message: Initial tables
 ```
