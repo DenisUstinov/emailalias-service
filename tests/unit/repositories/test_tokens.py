@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -9,10 +9,10 @@ from app.schemas.token import TokenData
 
 @pytest.mark.anyio
 class TestTokenRepository:
-    async def test_create_sets_expiration(self, test_uuids: dict[str, UUID]) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_create_sets_expiration(
+        self, test_uuids: dict[str, UUID], redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
 
         repo = TokenRepository(redis=redis_mock)
         hashed_token = "abc123"
@@ -48,10 +48,10 @@ class TestTokenRepository:
         assert result is None
         redis_mock.get.assert_awaited_once_with("tkn:unknown")
 
-    async def test_delete_removes_both_keys(self, test_uuids: dict[str, UUID]) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_delete_removes_both_keys(
+        self, test_uuids: dict[str, UUID], redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
 
         session_data = TokenData(user_id=test_uuids["user_1"], role="user")
         redis_mock.get.return_value = session_data.model_dump_json()
@@ -63,10 +63,10 @@ class TestTokenRepository:
         pipe_mock.delete.assert_any_call(f"usr:{session_data.user_id}")
         pipe_mock.execute.assert_awaited_once()
 
-    async def test_delete_does_nothing_when_token_missing(self) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_delete_does_nothing_when_token_missing(
+        self, redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
         redis_mock.get.return_value = None
 
         repo = TokenRepository(redis=redis_mock)

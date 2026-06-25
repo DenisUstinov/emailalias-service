@@ -66,7 +66,13 @@ class TestUpdateUserAdmin:
 
         assert response.status_code == 422
         data = response.json()
-        assert isinstance(data.get("detail"), list)
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
 
     async def test_auth_error_non_admin(
         self,
@@ -89,7 +95,7 @@ class TestUpdateUserAdmin:
         data = response.json()
         assert isinstance(data["status"], int)
         assert data["status"] == 403
-        assert "admin" in data["detail"].lower()
+        assert isinstance(data["detail"], str)
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)

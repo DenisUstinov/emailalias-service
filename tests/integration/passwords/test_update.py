@@ -2,7 +2,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.core.config import settings
 from app.core.exceptions import (
     EmailNotVerifiedError,
     UserBannedError,
@@ -10,7 +9,7 @@ from app.core.exceptions import (
 )
 from app.core.security import hash_token, verify_password
 from app.models.domain import User
-from app.schemas.verification import VerificationActionType, VerificationTokenData
+from app.schemas.verification import VerificationActionType
 
 
 @pytest.mark.anyio
@@ -24,22 +23,18 @@ class TestUpdatePassword:
         valid_test_password,
         new_valid_test_password,
         generate_test_email,
+        create_verification_token,
     ) -> None:
         email = generate_test_email(prefix="pwd_success")
         await create_test_user(email=email, password=valid_test_password)
 
         raw_token = "sUcC3sFullP4ssw0rdT0k3n12345678901234567890"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.PASSWORD_RESET,
+            raw_token=raw_token,
         )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
-        )
+        token_key = f"vtoken:{hash_token(raw_token)}"
 
         payload = {
             "email": email,
@@ -89,26 +84,20 @@ class TestUpdatePassword:
     async def test_business_error_email_not_verified_false(
         self,
         http_client: AsyncClient,
-        redis_client,
         create_test_user,
         valid_test_password,
         new_valid_test_password,
         generate_test_email,
+        create_verification_token,
     ) -> None:
         email = generate_test_email(prefix="pwd_wrong_action")
         await create_test_user(email=email, password=valid_test_password)
 
         raw_token = "wr0ngAct10nT0k3nF0rP4ssw0rd1234567890123456"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {
@@ -130,23 +119,17 @@ class TestUpdatePassword:
     async def test_business_error_user_not_found(
         self,
         http_client: AsyncClient,
-        redis_client,
         new_valid_test_password,
         generate_test_email,
+        create_verification_token,
     ) -> None:
         email = generate_test_email(prefix="pwd_not_found")
 
         raw_token = "n0tF0undUs3rT0k3nF0rP4ssw0rd123456789012345"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.PASSWORD_RESET,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {
@@ -168,25 +151,19 @@ class TestUpdatePassword:
     async def test_business_error_user_banned(
         self,
         http_client: AsyncClient,
-        redis_client,
         create_test_user,
         new_valid_test_password,
         generate_test_email,
+        create_verification_token,
     ) -> None:
         email = generate_test_email(prefix="pwd_banned")
         await create_test_user(email=email, password="OldP@ssw0rd123!", is_banned=True)
 
         raw_token = "b4nn3d_us3r_t0k3n_1234567890123456789012345"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.PASSWORD_RESET,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {

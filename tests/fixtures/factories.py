@@ -1,10 +1,11 @@
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.domain import User, UserRole
+from app.models.domain import Domain, User, UserRole
 
 
 @pytest.fixture
@@ -30,3 +31,19 @@ def make_user() -> Callable[..., User]:
         )
 
     return _factory
+
+
+@pytest.fixture
+async def create_test_domain(
+    db_session: AsyncSession,
+) -> Callable[..., Awaitable[Domain]]:
+    async def _create(
+        fqdn: str,
+        is_default: bool = False,
+    ) -> Domain:
+        domain = Domain(fqdn=fqdn, is_default=is_default)
+        db_session.add(domain)
+        await db_session.flush()
+        return domain
+
+    return _create

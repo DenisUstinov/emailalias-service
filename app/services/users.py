@@ -34,6 +34,25 @@ class UserService:
         self.verification_service = verification_service
         self.token_service = token_service
 
+    async def _get_active_user(self, user_id: uuid.UUID) -> User | None:
+        user = await self.user_repo.get_by_id_for_update(user_id)
+        if not user:
+            return None
+        if user.is_banned:
+            logger.error(
+                "Operation attempt by banned user with active session",
+                extra={"user_id": user_id},
+            )
+            try:
+                await self.token_service.revoke_active_tokens(user_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to revoke tokens for banned user",
+                    extra={"user_id": user_id, "error": str(e)},
+                )
+            raise UserBannedError()
+        return user
+
     async def create_user(self, request: UserCreateRequest) -> UserCreateResponse:
         await self.verification_service.verify_operation_token(
             token=request.verification_token,
@@ -77,36 +96,33 @@ class UserService:
         return UserCreateResponse.model_validate(created)
 
     async def delete_user(self, user_id: uuid.UUID, verification_token: str) -> None:
-        user = await self.user_repo.get_by_id_for_update(user_id)
-        if not user:
-            return None
-        if user.is_banned:
-            logger.warning(
-                "Deletion attempt by banned user",
+        user = await self._get_active_user(user_id)
+
+        if user:
+            await self.verification_service.verify_operation_token(
+                token=verification_token,
+                email=user.email,
+                expected_action=VerificationActionType.USER_DELETION,
+            )
+            await self.user_repo.delete(user_id)
+
+            logger.info(
+                "User account successfully soft-deleted",
                 extra={"user_id": user_id},
             )
-            raise UserBannedError()
-
-        await self.verification_service.verify_operation_token(
-            token=verification_token,
-            email=user.email,
-            expected_action=VerificationActionType.USER_DELETION,
-        )
-
-        await self.user_repo.delete(user_id)
+        else:
+            logger.error(
+                "Deletion attempt for non-existent user with active session",
+                extra={"user_id": user_id},
+            )
 
         try:
             await self.token_service.revoke_active_tokens(user_id)
         except Exception as e:
             logger.error(
-                "Failed to execute post-commit side effects on user deletion",
+                "Failed to revoke active tokens during user deletion",
                 extra={"user_id": user_id, "error": str(e)},
             )
-
-        logger.info(
-            "User account successfully soft-deleted",
-            extra={"user_id": user_id},
-        )
 
     async def update_user(
         self,
@@ -116,6 +132,21 @@ class UserService:
         current_password: str | None = None,
         verification_token: str | None = None,
     ) -> UserUpdateResponse:
+        user = await self._get_active_user(user_id)
+        if not user:
+            logger.error(
+                "Update attempt for non-existent user with active session",
+                extra={"user_id": user_id},
+            )
+            try:
+                await self.token_service.revoke_active_tokens(user_id)
+            except Exception as e:
+                logger.error(
+                    "Failed to revoke tokens for non-existent user",
+                    extra={"user_id": user_id, "error": str(e)},
+                )
+            raise UserNotFoundError()
+
         if new_password is not None:
             if current_password is None:
                 logger.warning(
@@ -124,14 +155,6 @@ class UserService:
                 )
                 raise CurrentPasswordRequiredError()
 
-            user = await self.user_repo.get_by_id_for_update(user_id)
-            if not user:
-                logger.warning(
-                    "User not found for password update",
-                    extra={"user_id": user_id},
-                )
-                raise UserNotFoundError()
-
             if not verify_password(current_password, user.password_hash):
                 logger.warning(
                     "Invalid current password provided",
@@ -139,25 +162,16 @@ class UserService:
                 )
                 raise CurrentPasswordInvalidError()
 
-        if email is not None:
-            if verification_token is None:
-                logger.warning(
-                    "Email update attempt without verification token",
-                    extra={"user_id": user_id, "email": email},
-                )
-                raise CurrentPasswordRequiredError()
+            new_password_hash = await asyncio.to_thread(hash_password, new_password)
+        else:
+            new_password_hash = None
 
+        if email is not None:
             await self.verification_service.verify_operation_token(
                 token=verification_token,
                 email=email,
                 expected_action=VerificationActionType.EMAIL_CHANGE,
             )
-
-        new_password_hash = (
-            await asyncio.to_thread(hash_password, new_password)
-            if new_password is not None
-            else None
-        )
 
         try:
             updated = await self.user_repo.update(
@@ -177,7 +191,7 @@ class UserService:
         except Exception as e:
             logger.error(
                 "Failed to execute post-flush side effects on user update",
-                extra={"user_id": user_id, "email": email, "error": str(e)},
+                extra={"user_id": user_id, "error": str(e)},
             )
 
         logger.info(

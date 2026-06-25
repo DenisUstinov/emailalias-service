@@ -8,6 +8,7 @@ from app.core.exceptions import InvalidCredentialsError, UserBannedError
 from app.models.domain import User
 from app.schemas.responses import TokenCreateResponse
 from app.services.tokens import TokenService
+from tests.helpers import assert_exception_details
 
 
 @pytest.mark.anyio
@@ -71,7 +72,7 @@ class TestTokenServiceCreateToken:
                 password=valid_test_password,
             )
 
-        assert exc_info.value.status_code == 401
+        assert_exception_details(exc_info, 401, InvalidCredentialsError)
         user_repo.get_by_email.assert_awaited_once_with("unknown@example.com")
         token_repo.get_hashed_token_by_user_id.assert_not_awaited()
 
@@ -105,7 +106,7 @@ class TestTokenServiceCreateToken:
                 password=invalid_test_password,
             )
 
-        assert exc_info.value.status_code == 401
+        assert_exception_details(exc_info, 401, InvalidCredentialsError)
         user_repo.get_by_email.assert_awaited_once_with(test_email)
         token_repo.get_hashed_token_by_user_id.assert_not_awaited()
 
@@ -140,7 +141,7 @@ class TestTokenServiceCreateToken:
                 password=valid_test_password,
             )
 
-        assert exc_info.value.status_code == 403
+        assert_exception_details(exc_info, 403, UserBannedError)
         user_repo.get_by_email.assert_awaited_once_with(test_email)
         token_repo.get_hashed_token_by_user_id.assert_awaited_once_with(user.id)
 

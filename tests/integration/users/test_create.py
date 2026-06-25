@@ -1,8 +1,7 @@
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import func, select, update
+from sqlalchemy import select
 
-from app.core.config import settings
 from app.core.exceptions import (
     EmailAlreadyExistsError,
     EmailNotVerifiedError,
@@ -11,10 +10,7 @@ from app.core.exceptions import (
 from app.core.security import hash_token, verify_password
 from app.models.domain import User, UserRole
 from app.schemas.responses import UserCreateResponse
-from app.schemas.verification import (
-    VerificationActionType,
-    VerificationTokenData,
-)
+from app.schemas.verification import VerificationActionType
 
 
 @pytest.mark.anyio
@@ -24,6 +20,7 @@ class TestCreateUser:
         http_client: AsyncClient,
         db_session,
         redis_client,
+        create_verification_token,
         valid_test_password,
         generate_test_email,
     ) -> None:
@@ -31,16 +28,11 @@ class TestCreateUser:
         password = valid_test_password
 
         raw_token = "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        token_key = f"vtoken:{hash_token(raw_token)}"
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {"email": email, "password": password, "verification_token": raw_token}
@@ -78,9 +70,16 @@ class TestCreateUser:
             "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
         }
         response = await http_client.post("/api/v1/users", json=payload)
+
         assert response.status_code == 422
         data = response.json()
-        assert isinstance(data.get("detail"), list)
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
 
     @pytest.mark.parametrize(
         "invalid_password",
@@ -97,9 +96,16 @@ class TestCreateUser:
             "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
         }
         response = await http_client.post("/api/v1/users", json=payload)
+
         assert response.status_code == 422
         data = response.json()
-        assert isinstance(data.get("detail"), list)
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
 
     @pytest.mark.parametrize(
         "payload",
@@ -120,9 +126,16 @@ class TestCreateUser:
         self, http_client: AsyncClient, payload: dict
     ) -> None:
         response = await http_client.post("/api/v1/users", json=payload)
+
         assert response.status_code == 422
         data = response.json()
-        assert isinstance(data.get("detail"), list)
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
 
     async def test_business_error_email_not_verified(
         self,
@@ -151,28 +164,24 @@ class TestCreateUser:
     async def test_business_error_email_not_verified_false(
         self,
         http_client: AsyncClient,
-        redis_client,
+        create_verification_token,
         valid_test_password,
         generate_test_email,
     ) -> None:
         email = generate_test_email(prefix="create")
+
+        raw_token = "wrong_action_token_123456789012345678901234"
+        await create_verification_token(
+            email=email,
+            action_type=VerificationActionType.PASSWORD_RESET,
+            raw_token=raw_token,
+        )
+
         payload = {
             "email": email,
             "password": valid_test_password,
-            "verification_token": "wrong_action_token_123456789012345678901234",
+            "verification_token": raw_token,
         }
-
-        token_hash = hash_token("wrong_action_token_123456789012345678901234")
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
-            email=email,
-            action_type=VerificationActionType.PASSWORD_RESET,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
-        )
 
         response = await http_client.post("/api/v1/users", json=payload)
 
@@ -188,7 +197,7 @@ class TestCreateUser:
     async def test_business_error_email_already_exists(
         self,
         http_client: AsyncClient,
-        redis_client,
+        create_verification_token,
         valid_test_password,
         generate_test_email,
     ) -> None:
@@ -196,16 +205,10 @@ class TestCreateUser:
         password = valid_test_password
 
         raw_token = "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         first_payload = {"email": email, "password": password, "verification_token": raw_token}
@@ -213,16 +216,10 @@ class TestCreateUser:
         assert first_response.status_code == 201
 
         raw_token_2 = "D9eL2kP5nQ8vM1wR4tY7uZ0sA3bC6dE9gH2jN5pM8xW"
-        token_hash_2 = hash_token(raw_token_2)
-        token_key_2 = f"vtoken:{token_hash_2}"
-        token_data_2 = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key_2,
-            token_data_2.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token_2,
         )
 
         second_payload = {"email": email, "password": password, "verification_token": raw_token_2}
@@ -243,6 +240,7 @@ class TestCreateUser:
         db_session,
         redis_client,
         create_test_user,
+        create_verification_token,
         valid_test_password,
         new_valid_test_password,
         generate_test_email,
@@ -251,24 +249,14 @@ class TestCreateUser:
         old_password = valid_test_password
         new_password = new_valid_test_password
 
-        user = await create_test_user(email=email, password=old_password)
-
-        await db_session.execute(
-            update(User).where(User.id == user.id).values(deleted_at=func.now())
-        )
-        await db_session.flush()
+        user = await create_test_user(email=email, password=old_password, is_deleted=True)
 
         raw_token = "R3aCt1v4t3T0k3nF0rT3st1ngPurp0s3sOn1y123456"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        token_key = f"vtoken:{hash_token(raw_token)}"
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {"email": email, "password": new_password, "verification_token": raw_token}
@@ -294,30 +282,22 @@ class TestCreateUser:
         self,
         http_client: AsyncClient,
         db_session,
-        redis_client,
         create_test_user,
+        create_verification_token,
         valid_test_password,
         generate_test_email,
     ) -> None:
         email = generate_test_email(prefix="banned_react")
-        user = await create_test_user(email=email, password=valid_test_password, is_banned=True)
 
-        await db_session.execute(
-            update(User).where(User.id == user.id).values(deleted_at=func.now())
+        user = await create_test_user(
+            email=email, password=valid_test_password, is_banned=True, is_deleted=True
         )
-        await db_session.flush()
 
         raw_token = "B4nn3dR34ctT0k3nF0rT3st1ngPurp0s3s0n1y12345"
-        token_hash = hash_token(raw_token)
-        token_key = f"vtoken:{token_hash}"
-        token_data = VerificationTokenData(
+        await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-        )
-        await redis_client.set(
-            token_key,
-            token_data.model_dump_json(),
-            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+            raw_token=raw_token,
         )
 
         payload = {"email": email, "password": valid_test_password, "verification_token": raw_token}

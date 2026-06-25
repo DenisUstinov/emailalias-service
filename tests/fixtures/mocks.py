@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from psycopg2.errors import UniqueViolation
@@ -20,6 +20,14 @@ def mock_session() -> MagicMock:
 @pytest.fixture
 def mock_async_repository() -> AsyncMock:
     return AsyncMock()
+
+
+@pytest.fixture
+def redis_with_pipeline() -> tuple[AsyncMock, AsyncMock]:
+    redis_mock = AsyncMock()
+    pipe_mock = AsyncMock()
+    redis_mock.pipeline = Mock(return_value=pipe_mock)
+    return redis_mock, pipe_mock
 
 
 @pytest.fixture

@@ -12,6 +12,7 @@ from app.core.exceptions import (
 from app.models.domain import User
 from app.schemas.requests import PasswordUpdateRequest
 from app.services.passwords import PasswordService
+from tests.helpers import assert_exception_details
 
 
 @pytest.mark.anyio
@@ -83,7 +84,7 @@ class TestPasswordServiceUpdatePassword:
         with pytest.raises(EmailNotVerifiedError) as exc_info:
             await service.update_password(request=request)
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
         user_repo.get_by_email_for_update.assert_not_awaited()
 
     async def test_raises_when_user_not_found(
@@ -111,7 +112,7 @@ class TestPasswordServiceUpdatePassword:
         with pytest.raises(UserNotFoundError) as exc_info:
             await service.update_password(request=request)
 
-        assert exc_info.value.status_code == 404
+        assert_exception_details(exc_info, 404, UserNotFoundError)
 
     async def test_raises_when_user_banned(
         self,
@@ -146,7 +147,7 @@ class TestPasswordServiceUpdatePassword:
         with pytest.raises(UserBannedError) as exc_info:
             await service.update_password(request=request)
 
-        assert exc_info.value.status_code == 403
+        assert_exception_details(exc_info, 403, UserBannedError)
         user_repo.update.assert_not_awaited()
 
     async def test_success_handles_token_revocation_failure(

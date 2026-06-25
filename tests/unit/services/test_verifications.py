@@ -18,6 +18,7 @@ from app.schemas.verification import (
     VerificationTokenData,
 )
 from app.services.verifications import VerificationService
+from tests.helpers import assert_exception_details
 
 
 @pytest.mark.anyio
@@ -92,8 +93,8 @@ class TestVerificationServiceCreate:
                 "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
         expected_remaining = settings.VERIFICATION_COOLDOWN_SECONDS - 10
+        assert exc_info.value.status_code == 400
         assert (
             exc_info.value.detail
             == VerificationCooldownError(remaining_seconds=expected_remaining).detail
@@ -127,7 +128,7 @@ class TestVerificationServiceCreate:
                 "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, VerificationMaxAttemptsExceededError)
 
     async def test_raises_max_requests_exceeded_when_rate_limit_reached(self) -> None:
         repo_mock = AsyncMock()
@@ -145,7 +146,7 @@ class TestVerificationServiceCreate:
                 "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, VerificationMaxRequestsExceededError)
 
 
 @pytest.mark.anyio
@@ -187,7 +188,7 @@ class TestVerificationServiceConfirm:
         with pytest.raises(VerificationSessionNotFoundError) as exc_info:
             await service.confirm_verification("unknown", "123456")
 
-        assert exc_info.value.status_code == 404
+        assert_exception_details(exc_info, 404, VerificationSessionNotFoundError)
 
     async def test_raises_attempts_limit_exceeded_when_check_attempts_reached(self) -> None:
         repo_mock = AsyncMock()
@@ -207,7 +208,7 @@ class TestVerificationServiceConfirm:
         with pytest.raises(VerificationAttemptsLimitExceededError) as exc_info:
             await service.confirm_verification("sess_id", "123456")
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, VerificationAttemptsLimitExceededError)
 
     async def test_raises_invalid_otp_and_increments_attempts(self) -> None:
         repo_mock = AsyncMock()
@@ -230,8 +231,8 @@ class TestVerificationServiceConfirm:
         ):
             await service.confirm_verification("sess_id", "000000")
 
-        assert exc_info.value.status_code == 400
         expected_remaining = settings.VERIFICATION_MAX_CHECK_ATTEMPTS - 1
+        assert exc_info.value.status_code == 400
         assert (
             exc_info.value.detail
             == VerificationInvalidOTPError(attempts_remaining=expected_remaining).detail
@@ -277,7 +278,7 @@ class TestVerificationServiceVerifyOperationToken:
                 "raw_token", "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
 
     async def test_raises_email_not_verified_when_action_type_mismatch(self) -> None:
         repo_mock = AsyncMock()
@@ -298,7 +299,7 @@ class TestVerificationServiceVerifyOperationToken:
                 "raw_token", "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
 
     async def test_raises_email_not_verified_when_email_mismatch(self) -> None:
         repo_mock = AsyncMock()
@@ -319,4 +320,4 @@ class TestVerificationServiceVerifyOperationToken:
                 "raw_token", "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)

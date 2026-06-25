@@ -1,7 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
-from app.models.domain import Domain, UserRole
+from app.models.domain import UserRole
 from app.schemas.responses import DomainResponse
 
 
@@ -10,13 +10,11 @@ class TestGetDomains:
     async def test_success_returns_domains(
         self,
         http_client: AsyncClient,
-        db_session,
+        create_test_domain,
         authenticated_headers,
     ) -> None:
-        domain1 = Domain(fqdn="default.com", is_default=True)
-        domain2 = Domain(fqdn="custom.com", is_default=False)
-        db_session.add_all([domain1, domain2])
-        await db_session.flush()
+        await create_test_domain(fqdn="default.com", is_default=True)
+        await create_test_domain(fqdn="custom.com", is_default=False)
 
         headers = await authenticated_headers(role=UserRole.USER)
         response = await http_client.get("/api/v1/domains", headers=headers)

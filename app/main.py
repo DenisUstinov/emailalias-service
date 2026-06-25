@@ -3,6 +3,7 @@ import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.asyncio import ConnectionPool, Redis
@@ -194,6 +195,31 @@ async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded)
     )
 
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = exc.errors()
+    for error in errors:
+        if "ctx" in error and isinstance(error["ctx"].get("error"), Exception):
+            error["ctx"]["error"] = str(error["ctx"]["error"])
+
+    detail = "; ".join(
+        f"{error.get('loc', ['body'])[-1]}: {error.get('msg', '')}" for error in errors
+    )
+
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        media_type="application/problem+json",
+        content={
+            "type": f"{settings.SERVICE_NAME}/errors/422",
+            "title": _get_title_for_status(status.HTTP_422_UNPROCESSABLE_CONTENT),
+            "status": status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "detail": detail,
+            "instance": str(request.url),
+            "field_errors": errors,
+        },
+    )
+
+
 def _get_title_for_status(status_code: int) -> str:
     titles = {
         400: "Bad Request",
@@ -201,7 +227,7 @@ def _get_title_for_status(status_code: int) -> str:
         403: "Forbidden",
         404: "Not Found",
         409: "Conflict",
-        422: "Unprocessable Entity",
+        422: "Unprocessable Content",
         429: "Too Many Requests",
         500: "Internal Server Error",
         502: "Bad Gateway",

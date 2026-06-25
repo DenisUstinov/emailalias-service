@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -80,10 +80,10 @@ class TestVerificationRepository:
 
         assert result is None
 
-    async def test_create_session_uses_pipeline(self) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_create_session_uses_pipeline(
+        self, redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
         repo = VerificationRepository(redis=redis_mock)
 
         data = VerificationSessionData(
@@ -99,10 +99,10 @@ class TestVerificationRepository:
         pipe_mock.set.assert_any_await("verification:email:hash", "sess_id", ex=3600)
         pipe_mock.execute.assert_awaited_once()
 
-    async def test_update_session_uses_pipeline_with_keepttl(self) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_update_session_uses_pipeline_with_keepttl(
+        self, redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
         repo = VerificationRepository(redis=redis_mock)
 
         data = VerificationSessionData(
@@ -118,10 +118,10 @@ class TestVerificationRepository:
         pipe_mock.set.assert_any_await("verification:email:hash", "sess_id", keepttl=True)
         pipe_mock.execute.assert_awaited_once()
 
-    async def test_delete_session_uses_pipeline(self) -> None:
-        redis_mock = AsyncMock()
-        pipe_mock = AsyncMock()
-        redis_mock.pipeline = Mock(return_value=pipe_mock)
+    async def test_delete_session_uses_pipeline(
+        self, redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    ) -> None:
+        redis_mock, pipe_mock = redis_with_pipeline
         repo = VerificationRepository(redis=redis_mock)
 
         await repo.delete_session("sess_id", "hash")

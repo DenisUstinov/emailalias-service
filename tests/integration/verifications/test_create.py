@@ -58,30 +58,20 @@ class TestCreateVerification:
         redis_client,
         faker: Faker,
         override_email_sender,
+        create_verification_session,
     ) -> None:
         email = faker.email().lower()
         verification_id = "11111111-1111-1111-1111-111111111111"
         action_type = VerificationActionType.PASSWORD_RESET
 
-        email_hash = hash_email(email)
-        session = VerificationSessionData(
-            email=email,
-            otp="123456",
-            action_type=action_type,
-            request_count=1,
-            check_attempts=0,
-        )
-        session_key = f"verification:{verification_id}"
-        email_key = f"verification:email:{email_hash}"
-
-        await redis_client.set(
-            session_key, session.model_dump_json(), ex=settings.VERIFICATION_TTL_SECONDS
-        )
-        await redis_client.set(email_key, verification_id, ex=settings.VERIFICATION_TTL_SECONDS)
+        await create_verification_session(email, verification_id, action_type, "123456")
 
         ttl_after_cooldown = (
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
         )
+        session_key = f"verification:{verification_id}"
+        email_hash = hash_email(email)
+        email_key = f"verification:email:{email_hash}"
         await redis_client.expire(session_key, ttl_after_cooldown)
         await redis_client.expire(email_key, ttl_after_cooldown)
 
@@ -106,24 +96,25 @@ class TestCreateVerification:
         redis_client,
         faker: Faker,
         override_email_sender,
+        create_verification_session,
     ) -> None:
         email = faker.email().lower()
         old_verification_id = "22222222-2222-2222-2222-222222222222"
         action_type = VerificationActionType.EMAIL_CHANGE
 
-        email_hash = hash_email(email)
-        session = VerificationSessionData(
-            email=email,
-            otp="654321",
-            action_type=action_type,
+        await create_verification_session(
+            email,
+            old_verification_id,
+            action_type,
+            "654321",
             request_count=3,
             check_attempts=1,
+            ttl=1,
         )
-        session_key = f"verification:{old_verification_id}"
-        email_key = f"verification:email:{email_hash}"
 
-        await redis_client.set(session_key, session.model_dump_json(), ex=1)
-        await redis_client.set(email_key, old_verification_id, ex=1)
+        session_key = f"verification:{old_verification_id}"
+        email_hash = hash_email(email)
+        email_key = f"verification:email:{email_hash}"
         await redis_client.expire(session_key, 0)
         await redis_client.expire(email_key, 0)
 
@@ -158,34 +149,30 @@ class TestCreateVerification:
         self, http_client: AsyncClient, payload: dict
     ) -> None:
         response = await http_client.post("/api/v1/verifications", json=payload)
+
         assert response.status_code == 422
         data = response.json()
-        assert isinstance(data.get("detail"), list)
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
 
     async def test_business_error_cooldown_not_elapsed(
-        self, http_client: AsyncClient, redis_client, faker: Faker
+        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
     ) -> None:
         email = faker.email().lower()
         verification_id = "33333333-3333-3333-3333-333333333333"
         action_type = VerificationActionType.USER_DELETION
 
-        email_hash = hash_email(email)
-        session = VerificationSessionData(
-            email=email,
-            otp="111222",
-            action_type=action_type,
-            request_count=1,
-            check_attempts=0,
-        )
-        session_key = f"verification:{verification_id}"
-        email_key = f"verification:email:{email_hash}"
-
-        await redis_client.set(
-            session_key, session.model_dump_json(), ex=settings.VERIFICATION_TTL_SECONDS
-        )
-        await redis_client.set(email_key, verification_id, ex=settings.VERIFICATION_TTL_SECONDS)
+        await create_verification_session(email, verification_id, action_type, "111222")
 
         ttl_during_cooldown = settings.VERIFICATION_TTL_SECONDS - 10
+        session_key = f"verification:{verification_id}"
+        email_hash = hash_email(email)
+        email_key = f"verification:email:{email_hash}"
         await redis_client.expire(session_key, ttl_during_cooldown)
         await redis_client.expire(email_key, ttl_during_cooldown)
 
@@ -197,7 +184,7 @@ class TestCreateVerification:
         expected = VerificationCooldownError(
             remaining_seconds=settings.VERIFICATION_COOLDOWN_SECONDS - 10
         ).detail
-        assert data["status"] == response.status_code
+        assert data["status"] == 400
         assert data["detail"] == expected
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
@@ -217,7 +204,7 @@ class TestCreateVerification:
 
         assert response.status_code == 400
         data = response.json()
-        assert data["status"] == response.status_code
+        assert data["status"] == 400
         assert data["detail"] == VerificationMaxRequestsExceededError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)

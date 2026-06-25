@@ -3,11 +3,13 @@ from unittest.mock import MagicMock
 from uuid import UUID
 
 import pytest
-from sqlalchemy.sql.dml import Update
-from sqlalchemy.sql.selectable import Select
 
 from app.models.domain import User
 from app.repositories.users import UserRepository
+from tests.helpers import (
+    assert_session_execute_called_with_select,
+    assert_session_execute_called_with_update,
+)
 
 
 @pytest.mark.anyio
@@ -23,9 +25,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.get_by_email("test@example.com")
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Select)
+        assert_session_execute_called_with_select(mock_session)
         assert result == user
 
     async def test_get_by_email_returns_none_when_missing(self, mock_session: MagicMock) -> None:
@@ -49,9 +49,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.get_by_email_for_update("test@example.com")
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Select)
+        assert_session_execute_called_with_select(mock_session)
         assert result == user
 
     async def test_get_by_email_including_deleted_for_update_returns_user_when_exists(
@@ -65,9 +63,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.get_by_email_including_deleted_for_update("test@example.com")
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Select)
+        assert_session_execute_called_with_select(mock_session)
         assert result == user
 
     async def test_get_by_id_for_update_returns_user_when_exists(
@@ -81,9 +77,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.get_by_id_for_update(test_uuids["user_1"])
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Select)
+        assert_session_execute_called_with_select(mock_session)
         assert result == user
 
     async def test_get_by_id_for_update_returns_none_when_missing(
@@ -124,9 +118,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.update(user_id=user.id, email="new@example.com")
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Update)
+        assert_session_execute_called_with_update(mock_session)
         assert result == updated_user
 
     async def test_delete_soft_deletes_user(
@@ -140,9 +132,7 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         rowcount = await repo.delete(user.id)
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Update)
+        assert_session_execute_called_with_update(mock_session)
         mock_session.flush.assert_awaited_once()
         assert rowcount == 1
 
@@ -169,7 +159,5 @@ class TestUserRepository:
         repo = UserRepository(session=mock_session)
         result = await repo.reactivate(user.id, "$argon2id$newhash")
 
-        mock_session.execute.assert_awaited_once()
-        call_args = mock_session.execute.call_args[0][0]
-        assert isinstance(call_args, Update)
+        assert_session_execute_called_with_update(mock_session)
         assert result == user

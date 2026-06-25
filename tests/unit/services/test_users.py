@@ -18,6 +18,7 @@ from app.models.domain import User, UserRole
 from app.schemas.requests import UserCreateRequest
 from app.schemas.responses import UserAdminUpdateResponse, UserCreateResponse, UserUpdateResponse
 from app.services.users import UserService
+from tests.helpers import assert_exception_details
 
 
 @pytest.mark.anyio
@@ -117,7 +118,7 @@ class TestUserServiceCreateUser:
         with pytest.raises(EmailNotVerifiedError) as exc_info:
             await service.create_user(request)
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
 
     async def test_raises_when_user_banned(
         self,
@@ -147,7 +148,7 @@ class TestUserServiceCreateUser:
         with pytest.raises(UserBannedError) as exc_info:
             await service.create_user(request)
 
-        assert exc_info.value.status_code == 403
+        assert_exception_details(exc_info, 403, UserBannedError)
 
     async def test_raises_when_email_already_exists(
         self,
@@ -177,7 +178,7 @@ class TestUserServiceCreateUser:
         with pytest.raises(EmailAlreadyExistsError) as exc_info:
             await service.create_user(request)
 
-        assert exc_info.value.status_code == 409
+        assert_exception_details(exc_info, 409, EmailAlreadyExistsError)
 
 
 @pytest.mark.anyio
@@ -216,18 +217,21 @@ class TestUserServiceDeleteUser:
         mock_async_repository: AsyncMock,
     ) -> None:
         user_repo_mock = mock_async_repository
+        token_service_mock = AsyncMock()
         user_repo_mock.get_by_id_for_update.return_value = None
 
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         result = await service.delete_user(
             user_id=test_uuids["user_3"], verification_token="a" * 43
         )
+
         assert result is None
+        token_service_mock.revoke_active_tokens.assert_awaited_once_with(test_uuids["user_3"])
 
     async def test_raises_when_user_banned(
         self,
@@ -237,6 +241,7 @@ class TestUserServiceDeleteUser:
         mock_async_repository: AsyncMock,
     ) -> None:
         user_repo_mock = mock_async_repository
+        token_service_mock = AsyncMock()
         existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
         existing_user.is_banned = True
         user_repo_mock.get_by_id_for_update.return_value = existing_user
@@ -244,13 +249,14 @@ class TestUserServiceDeleteUser:
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         with pytest.raises(UserBannedError) as exc_info:
             await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
 
-        assert exc_info.value.status_code == 403
+        assert_exception_details(exc_info, 403, UserBannedError)
+        token_service_mock.revoke_active_tokens.assert_awaited_once_with(existing_user.id)
 
     async def test_raises_when_email_not_verified(
         self,
@@ -261,6 +267,7 @@ class TestUserServiceDeleteUser:
     ) -> None:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
         verification_service_mock.verify_operation_token.side_effect = EmailNotVerifiedError()
 
         existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
@@ -270,13 +277,14 @@ class TestUserServiceDeleteUser:
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         with pytest.raises(EmailNotVerifiedError) as exc_info:
             await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        token_service_mock.revoke_active_tokens.assert_not_called()
 
     async def test_success_handles_token_revocation_failure(
         self,
@@ -302,6 +310,7 @@ class TestUserServiceDeleteUser:
         await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
 
         user_repo_mock.delete.assert_awaited_once()
+        token_service_mock.revoke_active_tokens.assert_awaited_once()
 
 
 @pytest.mark.anyio
@@ -376,6 +385,52 @@ class TestUserServiceUpdateUser:
         assert isinstance(result, UserUpdateResponse)
         token_service_mock.revoke_active_tokens.assert_awaited_once()
 
+    async def test_success_update_both_email_and_password(
+        self,
+        make_user: Callable[..., User],
+        valid_test_password: str,
+        new_valid_test_password: str,
+        test_email_alt: str,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        user_repo_mock = mock_async_repository
+        verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
+
+        existing_user = make_user(
+            user_id=test_uuids["user_1"], email="old@example.com", password_hash="$argon2id$old"
+        )
+        user_repo_mock.get_by_id_for_update.return_value = existing_user
+
+        updated_user = make_user(
+            user_id=test_uuids["user_1"], email=test_email_alt, password_hash="$argon2id$new"
+        )
+        user_repo_mock.update.return_value = updated_user
+
+        service = UserService(
+            user_repo=user_repo_mock,
+            verification_service=verification_service_mock,
+            token_service=token_service_mock,
+        )
+
+        with (
+            patch("app.services.users.verify_password", return_value=True),
+            patch("app.services.users.hash_password", return_value="$argon2id$new"),
+        ):
+            result = await service.update_user(
+                user_id=existing_user.id,
+                email=test_email_alt,
+                new_password=new_valid_test_password,
+                current_password=valid_test_password,
+                verification_token="a" * 43,
+            )
+
+        assert isinstance(result, UserUpdateResponse)
+        assert result.email == test_email_alt
+        verification_service_mock.verify_operation_token.assert_awaited_once()
+        token_service_mock.revoke_active_tokens.assert_awaited_once()
+
     async def test_raises_when_password_change_without_current_password(
         self,
         make_user: Callable[..., User],
@@ -400,9 +455,9 @@ class TestUserServiceUpdateUser:
                 current_password=None,
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, CurrentPasswordRequiredError)
 
-    async def test_raises_when_user_not_found_for_password_update(
+    async def test_raises_when_user_not_found(
         self,
         valid_test_password: str,
         new_valid_test_password: str,
@@ -410,12 +465,13 @@ class TestUserServiceUpdateUser:
         mock_async_repository: AsyncMock,
     ) -> None:
         user_repo_mock = mock_async_repository
+        token_service_mock = AsyncMock()
         user_repo_mock.get_by_id_for_update.return_value = None
 
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -425,7 +481,8 @@ class TestUserServiceUpdateUser:
                 current_password=valid_test_password,
             )
 
-        assert exc_info.value.status_code == 404
+        assert_exception_details(exc_info, 404, UserNotFoundError)
+        token_service_mock.revoke_active_tokens.assert_awaited_once_with(test_uuids["user_3"])
 
     async def test_raises_when_current_password_invalid(
         self,
@@ -455,33 +512,7 @@ class TestUserServiceUpdateUser:
                 current_password=valid_test_password,
             )
 
-        assert exc_info.value.status_code == 400
-
-    async def test_raises_when_email_update_without_verification_token(
-        self,
-        make_user: Callable[..., User],
-        test_email_alt: str,
-        test_uuids: dict[str, UUID],
-        mock_async_repository: AsyncMock,
-    ) -> None:
-        user_repo_mock = mock_async_repository
-        existing_user = make_user(user_id=test_uuids["user_1"])
-        user_repo_mock.get_by_id_for_update.return_value = existing_user
-
-        service = UserService(
-            user_repo=user_repo_mock,
-            verification_service=AsyncMock(),
-            token_service=AsyncMock(),
-        )
-
-        with pytest.raises(CurrentPasswordRequiredError) as exc_info:
-            await service.update_user(
-                user_id=existing_user.id,
-                email=test_email_alt,
-                verification_token=None,
-            )
-
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, CurrentPasswordInvalidError)
 
     async def test_raises_when_email_not_verified(
         self,
@@ -492,6 +523,7 @@ class TestUserServiceUpdateUser:
     ) -> None:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
         verification_service_mock.verify_operation_token.side_effect = EmailNotVerifiedError()
 
         existing_user = make_user(user_id=test_uuids["user_1"])
@@ -500,7 +532,7 @@ class TestUserServiceUpdateUser:
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         with pytest.raises(EmailNotVerifiedError) as exc_info:
@@ -510,7 +542,8 @@ class TestUserServiceUpdateUser:
                 verification_token="a" * 43,
             )
 
-        assert exc_info.value.status_code == 400
+        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        token_service_mock.revoke_active_tokens.assert_not_called()
 
     async def test_raises_when_email_already_exists_on_update(
         self,
@@ -522,6 +555,7 @@ class TestUserServiceUpdateUser:
     ) -> None:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
 
         existing_user = make_user(user_id=test_uuids["user_1"])
         user_repo_mock.get_by_id_for_update.return_value = existing_user
@@ -530,7 +564,7 @@ class TestUserServiceUpdateUser:
         service = UserService(
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
-            token_service=AsyncMock(),
+            token_service=token_service_mock,
         )
 
         with pytest.raises(EmailAlreadyExistsError) as exc_info:
@@ -540,7 +574,54 @@ class TestUserServiceUpdateUser:
                 verification_token="a" * 43,
             )
 
-        assert exc_info.value.status_code == 409
+        assert_exception_details(exc_info, 409, EmailAlreadyExistsError)
+        token_service_mock.revoke_active_tokens.assert_not_called()
+
+    async def test_hash_password_called_only_when_new_password_provided(
+        self,
+        make_user: Callable[..., User],
+        test_email_alt: str,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        user_repo_mock = mock_async_repository
+        verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
+
+        existing_user = make_user(user_id=test_uuids["user_1"], email="old@example.com")
+        user_repo_mock.get_by_id_for_update.return_value = existing_user
+        updated_user = make_user(user_id=test_uuids["user_1"], email=test_email_alt)
+        user_repo_mock.update.return_value = updated_user
+
+        service = UserService(
+            user_repo=user_repo_mock,
+            verification_service=verification_service_mock,
+            token_service=token_service_mock,
+        )
+
+        with patch("app.services.users.hash_password") as mock_hash:
+            await service.update_user(
+                user_id=existing_user.id,
+                email=test_email_alt,
+                verification_token="a" * 43,
+            )
+            mock_hash.assert_not_called()
+
+        with (
+            patch(
+                "app.services.users.asyncio.to_thread", return_value="$argon2id$hashed"
+            ) as mock_to_thread,
+            patch("app.services.users.verify_password", return_value=True),
+        ):
+            await service.update_user(
+                user_id=existing_user.id,
+                new_password="NewP@ss123!",
+                current_password="OldP@ss123!",
+            )
+            mock_to_thread.assert_awaited_once()
+            call_args = mock_to_thread.call_args[0]
+            assert call_args[0].__name__ == "hash_password"
+            assert call_args[1] == "NewP@ss123!"
 
 
 @pytest.mark.anyio
@@ -630,4 +711,4 @@ class TestUserServiceUpdateUserAdmin:
                 is_banned=True,
             )
 
-        assert exc_info.value.status_code == 404
+        assert_exception_details(exc_info, 404, UserNotFoundError)

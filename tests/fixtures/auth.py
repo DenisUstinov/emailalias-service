@@ -5,9 +5,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from argon2 import PasswordHasher
 from pydantic import TypeAdapter
+from redis.asyncio import Redis
 from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user_id, get_token_repository
 from app.core.security import hash_token
 from app.main import app
@@ -15,6 +17,7 @@ from app.models.domain import User, UserRole
 from app.repositories.tokens import TokenRepository
 from app.schemas.common import SecurePassword
 from app.schemas.token import TokenData
+from app.schemas.verification import VerificationActionType, VerificationTokenData
 
 _secure_password_validator = TypeAdapter(SecurePassword)
 
@@ -91,6 +94,7 @@ async def create_test_user(
         email: str | None = None,
         role: UserRole = UserRole.USER,
         is_banned: bool = False,
+        is_deleted: bool = False,
     ) -> User:
         user_email = email or generate_test_email(prefix=role)
         password_hash = password_hasher.hash(password)
@@ -102,6 +106,7 @@ async def create_test_user(
                 password_hash=password_hash,
                 role=role,
                 is_banned=is_banned,
+                deleted_at=datetime.now(UTC) if is_deleted else None,
             )
             .returning(User)
         )
@@ -126,6 +131,32 @@ async def create_auth_token(
             hashed_token=hashed,
             data=TokenData(user_id=user_id, role=role, expires_at=expires_at),
             expire_seconds=ttl_seconds,
+        )
+        return token
+
+    return _create
+
+
+@pytest.fixture
+async def create_verification_token(
+    redis_client: Redis,
+) -> Callable[..., Awaitable[str]]:
+    async def _create(
+        email: str,
+        action_type: VerificationActionType,
+        raw_token: str | None = None,
+    ) -> str:
+        token = raw_token or uuid.uuid4().hex
+        token_hash = hash_token(token)
+        token_key = f"vtoken:{token_hash}"
+        token_data = VerificationTokenData(
+            email=email,
+            action_type=action_type,
+        )
+        await redis_client.set(
+            token_key,
+            token_data.model_dump_json(),
+            ex=settings.VERIFICATION_TOKEN_TTL_SECONDS,
         )
         return token
 
