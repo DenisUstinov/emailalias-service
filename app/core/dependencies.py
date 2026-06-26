@@ -11,10 +11,12 @@ from app.core.notifications import EmailSender, StubEmailSender
 from app.core.security import hash_token
 from app.models.database import AsyncSessionLocal
 from app.models.domain import UserRole
+from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
 from app.repositories.tokens import TokenRepository
 from app.repositories.users import UserRepository
 from app.repositories.verification import VerificationRepository
+from app.services.aliases import AliasService
 from app.services.domains import DomainService
 from app.services.passwords import PasswordService
 from app.services.tokens import TokenService
@@ -112,6 +114,17 @@ def get_domain_service(
 ) -> DomainService:
     domain_repo = DomainRepository(session=db)
     return DomainService(domain_repo=domain_repo)
+
+
+def get_alias_service(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> AliasService:
+    alias_repo = AliasRepository(session=db)
+    domain_repo = DomainRepository(session=db)
+    return AliasService(
+        alias_repo=alias_repo,
+        domain_repo=domain_repo,
+    )
 
 
 security = HTTPBearer()

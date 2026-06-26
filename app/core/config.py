@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_USER_DELETION: str = "3/minute"
     RATE_LIMIT_PASSWORD_UPDATE: str = "10/minute"
     RATE_LIMIT_DOMAINS: str = "60/minute"
+    RATE_LIMIT_ALIAS_CREATION: str = "10/minute"
 
     # Testing
     TESTING: bool = False
@@ -65,6 +66,9 @@ class Settings(BaseSettings):
     VERIFICATION_MAX_REQUEST_COUNT: int = Field(default=5, gt=0)
     VERIFICATION_MAX_CHECK_ATTEMPTS: int = Field(default=3, gt=0)
     OTP_RATE_LIMIT_TTL_SECONDS: int = Field(default=86400, gt=0)
+    ALIAS_RANDOM_LENGTH: int = Field(default=6, ge=4, le=12)
+    ALIAS_FREE_TIER_MONTHLY_LIMIT: int = Field(default=10, gt=0)
+    ALIAS_FREE_TIER_WINDOW_DAYS: int = Field(default=30, gt=0)
 
     @field_validator("SECRET_KEY")
     @classmethod

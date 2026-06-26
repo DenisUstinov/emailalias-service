@@ -1,10 +1,32 @@
 from typing import Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.domain import UserRole
-from app.schemas.common import NormalizedEmail, OtpCode, SecurePassword
+from app.schemas.common import AliasLocalPart, NormalizedEmail, OtpCode, SecurePassword
 from app.schemas.verification import VerificationActionType
+
+
+class AliasCreateRequest(BaseModel):
+    domain_id: UUID = Field(
+        ...,
+        description="Identifier of the domain to which the alias will be attached.",
+    )
+    local_part: AliasLocalPart = Field(
+        ...,
+        description="User-defined prefix for the alias. A 6-character random string will be \
+        appended.",
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "domain_id": "123e4567-e89b-12d3-a456-426614174000",
+                "local_part": "bugtracker",
+            }
+        }
+    )
 
 
 class PasswordUpdateRequest(BaseModel):

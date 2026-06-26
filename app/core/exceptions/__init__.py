@@ -1,3 +1,9 @@
+from .aliases import (
+    AliasCollisionError,
+    AliasDomainNotFoundError,
+    AliasMonthlyLimitExceededError,
+    AliasPremiumDomainRequiresSubscriptionError,
+)
 from .base import AppException
 from .common import (
     AuthenticationRequiredError,
@@ -21,6 +27,10 @@ from .verifications import (
 )
 
 __all__ = [
+    "AliasCollisionError",
+    "AliasDomainNotFoundError",
+    "AliasMonthlyLimitExceededError",
+    "AliasPremiumDomainRequiresSubscriptionError",
     "AppException",
     "AuthenticationRequiredError",
     "CurrentPasswordInvalidError",

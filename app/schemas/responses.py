@@ -6,6 +6,23 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.domain import UserRole
 
 
+class AliasCreateResponse(BaseModel):
+    id: UUID = Field(..., description="Unique identifier of the alias")
+    email: str = Field(..., description="Fully generated email address ready for use")
+    created_at: datetime = Field(..., description="Alias creation timestamp in UTC")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "bugtracker.a3F9x2@example.com",
+                "created_at": "2026-06-26T10:30:00Z",
+            }
+        },
+    )
+
+
 class DomainResponse(BaseModel):
     id: UUID = Field(..., description="Unique identifier of the domain in the local database")
     fqdn: str = Field(..., description="Fully qualified domain name used for mailbox creation")
