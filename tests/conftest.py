@@ -26,7 +26,7 @@ pytest_plugins = [
     "tests.fixtures.redis",
     "tests.fixtures.auth",
     "tests.fixtures.factories",
-    "tests.fixtures.email",
+    "tests.fixtures.notifications",
     "tests.fixtures.mocks",
     "tests.fixtures.deterministic",
     "tests.fixtures.rate_limits",

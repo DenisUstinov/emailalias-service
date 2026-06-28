@@ -13,8 +13,8 @@ class VerificationRepository:
             await self.redis.expire(key, expire_seconds)
         return count
 
-    async def get_session_id_by_email_hash(self, email_hash: str) -> str | None:
-        index_key = f"verification:email:{email_hash}"
+    async def get_session_id_by_contact_hash(self, contact_hash: str) -> str | None:
+        index_key = f"verification:contact:{contact_hash}"
         return await self.redis.get(index_key)
 
     async def get_session_ttl(self, session_id: str) -> int:
@@ -29,31 +29,31 @@ class VerificationRepository:
         return VerificationSessionData.model_validate_json(value)
 
     async def create_session(
-        self, session_id: str, email_hash: str, data: VerificationSessionData, expire_seconds: int
+        self, session_id: str, contact_hash: str, data: VerificationSessionData, expire_seconds: int
     ) -> None:
         session_key = f"verification:{session_id}"
-        email_key = f"verification:email:{email_hash}"
+        contact_key = f"verification:contact:{contact_hash}"
         pipe = self.redis.pipeline()
         await pipe.set(session_key, data.model_dump_json(), ex=expire_seconds)
-        await pipe.set(email_key, session_id, ex=expire_seconds)
+        await pipe.set(contact_key, session_id, ex=expire_seconds)
         await pipe.execute()
 
     async def update_session(
-        self, session_id: str, email_hash: str, data: VerificationSessionData
+        self, session_id: str, contact_hash: str, data: VerificationSessionData
     ) -> None:
         session_key = f"verification:{session_id}"
-        email_key = f"verification:email:{email_hash}"
+        contact_key = f"verification:contact:{contact_hash}"
         pipe = self.redis.pipeline()
         await pipe.set(session_key, data.model_dump_json(), keepttl=True)
-        await pipe.set(email_key, session_id, keepttl=True)
+        await pipe.set(contact_key, session_id, keepttl=True)
         await pipe.execute()
 
-    async def delete_session(self, session_id: str, email_hash: str) -> None:
+    async def delete_session(self, session_id: str, contact_hash: str) -> None:
         session_key = f"verification:{session_id}"
-        email_key = f"verification:email:{email_hash}"
+        contact_key = f"verification:contact:{contact_hash}"
         pipe = self.redis.pipeline()
         await pipe.delete(session_key)
-        await pipe.delete(email_key)
+        await pipe.delete(contact_key)
         await pipe.execute()
 
     async def save_token(

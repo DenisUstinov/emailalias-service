@@ -21,5 +21,5 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
-def hash_email(email: str) -> str:
-    return hashlib.sha256(email.lower().encode()).hexdigest()
+def hash_contact(contact: str) -> str:
+    return hashlib.sha256(contact.lower().encode()).hexdigest()

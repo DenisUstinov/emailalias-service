@@ -2,7 +2,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.core.exceptions import EmailNotVerifiedError, UserBannedError
+from app.core.exceptions import ContactNotVerifiedError, UserBannedError
 from app.core.security import hash_token
 from app.models.domain import User, UserRole
 from app.schemas.verification import VerificationActionType
@@ -60,7 +60,7 @@ class TestDeleteUserMe:
         after_verification = await redis_client.get(token_key)
         assert after_verification is None
 
-    async def test_business_error_email_not_verified(
+    async def test_business_error_contact_not_verified(
         self,
         http_client: AsyncClient,
         db_session,
@@ -90,7 +90,7 @@ class TestDeleteUserMe:
         assert isinstance(data["status"], int)
         assert data["status"] == 400
         assert isinstance(data["detail"], str)
-        assert data["detail"] == EmailNotVerifiedError().detail
+        assert data["detail"] == ContactNotVerifiedError().detail
         assert isinstance(data["instance"], str)
 
         result = await db_session.execute(select(User).where(User.id == user.id))

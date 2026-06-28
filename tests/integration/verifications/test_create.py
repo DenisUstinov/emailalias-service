@@ -7,7 +7,7 @@ from app.core.exceptions import (
     VerificationCooldownError,
     VerificationMaxRequestsExceededError,
 )
-from app.core.security import hash_email
+from app.core.security import hash_contact
 from app.schemas.responses import VerificationCreateResponse
 from app.schemas.verification import VerificationActionType, VerificationSessionData
 
@@ -19,7 +19,7 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_email_sender,
+        override_otp_sender,
     ) -> None:
         email = faker.email().lower()
         action_type = VerificationActionType.USER_CREATION
@@ -35,29 +35,29 @@ class TestCreateVerification:
         stored_session = await redis_client.get(session_key)
         assert stored_session is not None
         session = VerificationSessionData.model_validate_json(stored_session)
-        assert session.email == email
+        assert session.contact == email
         assert session.action_type == action_type
         assert len(session.otp) == 6
         assert session.request_count == 1
         assert session.check_attempts == 0
 
-        email_hash = hash_email(email)
-        email_key = f"verification:email:{email_hash}"
-        stored_id = await redis_client.get(email_key)
+        contact_hash = hash_contact(email)
+        contact_key = f"verification:contact:{contact_hash}"
+        stored_id = await redis_client.get(contact_key)
         assert stored_id == str(verification_id)
 
-        rate_limit_key = f"rate_limit:otp:{email_hash}"
+        rate_limit_key = f"rate_limit:otp:{contact_hash}"
         rate_limit_count = await redis_client.get(rate_limit_key)
         assert rate_limit_count == "1"
 
-        override_email_sender.send_otp.assert_awaited_once_with(email, session.otp)
+        override_otp_sender.send_otp.assert_awaited_once_with(email, session.otp)
 
     async def test_success_resend_after_cooldown_elapsed(
         self,
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_email_sender,
+        override_otp_sender,
         create_verification_session,
     ) -> None:
         email = faker.email().lower()
@@ -70,10 +70,10 @@ class TestCreateVerification:
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
         )
         session_key = f"verification:{verification_id}"
-        email_hash = hash_email(email)
-        email_key = f"verification:email:{email_hash}"
+        contact_hash = hash_contact(email)
+        contact_key = f"verification:contact:{contact_hash}"
         await redis_client.expire(session_key, ttl_after_cooldown)
-        await redis_client.expire(email_key, ttl_after_cooldown)
+        await redis_client.expire(contact_key, ttl_after_cooldown)
 
         payload = {"email": email, "action_type": action_type.value}
         response = await http_client.post("/api/v1/verifications", json=payload)
@@ -88,14 +88,14 @@ class TestCreateVerification:
         assert updated_session.check_attempts == 0
         assert updated_session.otp != "123456"
 
-        override_email_sender.send_otp.assert_awaited_once_with(email, updated_session.otp)
+        override_otp_sender.send_otp.assert_awaited_once_with(email, updated_session.otp)
 
     async def test_success_creates_new_session_after_ttl_expired(
         self,
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_email_sender,
+        override_otp_sender,
         create_verification_session,
     ) -> None:
         email = faker.email().lower()
@@ -113,10 +113,10 @@ class TestCreateVerification:
         )
 
         session_key = f"verification:{old_verification_id}"
-        email_hash = hash_email(email)
-        email_key = f"verification:email:{email_hash}"
+        contact_hash = hash_contact(email)
+        contact_key = f"verification:contact:{contact_hash}"
         await redis_client.expire(session_key, 0)
-        await redis_client.expire(email_key, 0)
+        await redis_client.expire(contact_key, 0)
 
         payload = {"email": email, "action_type": action_type.value}
         response = await http_client.post("/api/v1/verifications", json=payload)
@@ -132,7 +132,7 @@ class TestCreateVerification:
         assert new_session.otp != "654321"
         assert new_session.check_attempts == 0
 
-        override_email_sender.send_otp.assert_awaited_once_with(email, new_session.otp)
+        override_otp_sender.send_otp.assert_awaited_once_with(email, new_session.otp)
 
     @pytest.mark.parametrize(
         "payload",
@@ -171,10 +171,10 @@ class TestCreateVerification:
 
         ttl_during_cooldown = settings.VERIFICATION_TTL_SECONDS - 10
         session_key = f"verification:{verification_id}"
-        email_hash = hash_email(email)
-        email_key = f"verification:email:{email_hash}"
+        contact_hash = hash_contact(email)
+        contact_key = f"verification:contact:{contact_hash}"
         await redis_client.expire(session_key, ttl_during_cooldown)
-        await redis_client.expire(email_key, ttl_during_cooldown)
+        await redis_client.expire(contact_key, ttl_during_cooldown)
 
         payload = {"email": email, "action_type": action_type.value}
         response = await http_client.post("/api/v1/verifications", json=payload)
@@ -194,8 +194,8 @@ class TestCreateVerification:
         self, http_client: AsyncClient, redis_client, faker: Faker
     ) -> None:
         email = faker.email().lower()
-        email_hash = hash_email(email)
-        rate_limit_key = f"rate_limit:otp:{email_hash}"
+        contact_hash = hash_contact(email)
+        rate_limit_key = f"rate_limit:otp:{contact_hash}"
         await redis_client.set(rate_limit_key, settings.VERIFICATION_MAX_REQUEST_COUNT)
         await redis_client.expire(rate_limit_key, settings.OTP_RATE_LIMIT_TTL_SECONDS)
 
@@ -215,7 +215,7 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_email_sender,
+        override_otp_sender,
     ) -> None:
         email_original = "Test@Example.COM"
         email_lower = email_original.lower()
@@ -227,15 +227,15 @@ class TestCreateVerification:
         first_data = VerificationCreateResponse(**response_first.json())
         first_id = first_data.verification_id
 
-        email_hash = hash_email(email_lower)
+        contact_hash = hash_contact(email_lower)
         session_key = f"verification:{first_id}"
-        email_key = f"verification:email:{email_hash}"
+        contact_key = f"verification:contact:{contact_hash}"
 
         ttl_after_cooldown = (
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
         )
         await redis_client.expire(session_key, ttl_after_cooldown)
-        await redis_client.expire(email_key, ttl_after_cooldown)
+        await redis_client.expire(contact_key, ttl_after_cooldown)
 
         payload_second = {"email": email_lower, "action_type": action_type.value}
         response_second = await http_client.post("/api/v1/verifications", json=payload_second)
@@ -245,7 +245,7 @@ class TestCreateVerification:
 
         assert str(first_id) == str(second_id)
 
-        rate_limit_key = f"rate_limit:otp:{email_hash}"
+        rate_limit_key = f"rate_limit:otp:{contact_hash}"
         rate_limit_count = await redis_client.get(rate_limit_key)
         assert rate_limit_count == "2"
 
@@ -254,7 +254,7 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_email_sender,
+        override_otp_sender,
     ) -> None:
         email = faker.email().lower()
         action_type = VerificationActionType.USER_CREATION

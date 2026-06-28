@@ -7,10 +7,10 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.core.exceptions import (
+    ContactNotVerifiedError,
     CurrentPasswordInvalidError,
     CurrentPasswordRequiredError,
     EmailAlreadyExistsError,
-    EmailNotVerifiedError,
     UserBannedError,
     UserNotFoundError,
 )
@@ -95,7 +95,7 @@ class TestUserServiceCreateUser:
         user_repo_mock.reactivate.assert_awaited_once()
         assert isinstance(result, UserCreateResponse)
 
-    async def test_raises_when_email_not_verified(
+    async def test_raises_when_contact_not_verified(
         self,
         valid_test_password: str,
         test_email: str,
@@ -103,7 +103,7 @@ class TestUserServiceCreateUser:
     ) -> None:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
-        verification_service_mock.verify_operation_token.side_effect = EmailNotVerifiedError()
+        verification_service_mock.verify_operation_token.side_effect = ContactNotVerifiedError()
 
         service = UserService(
             user_repo=user_repo_mock,
@@ -115,10 +115,10 @@ class TestUserServiceCreateUser:
             email=test_email, password=valid_test_password, verification_token="a" * 43
         )
 
-        with pytest.raises(EmailNotVerifiedError) as exc_info:
+        with pytest.raises(ContactNotVerifiedError) as exc_info:
             await service.create_user(request)
 
-        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        assert_exception_details(exc_info, 400, ContactNotVerifiedError)
 
     async def test_raises_when_user_banned(
         self,
@@ -258,7 +258,7 @@ class TestUserServiceDeleteUser:
         assert_exception_details(exc_info, 403, UserBannedError)
         token_service_mock.revoke_active_tokens.assert_awaited_once_with(existing_user.id)
 
-    async def test_raises_when_email_not_verified(
+    async def test_raises_when_contact_not_verified(
         self,
         make_user: Callable[..., User],
         test_email: str,
@@ -268,7 +268,7 @@ class TestUserServiceDeleteUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
-        verification_service_mock.verify_operation_token.side_effect = EmailNotVerifiedError()
+        verification_service_mock.verify_operation_token.side_effect = ContactNotVerifiedError()
 
         existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
         existing_user.is_banned = False
@@ -280,10 +280,10 @@ class TestUserServiceDeleteUser:
             token_service=token_service_mock,
         )
 
-        with pytest.raises(EmailNotVerifiedError) as exc_info:
+        with pytest.raises(ContactNotVerifiedError) as exc_info:
             await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
 
-        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        assert_exception_details(exc_info, 400, ContactNotVerifiedError)
         token_service_mock.revoke_active_tokens.assert_not_called()
 
     async def test_success_handles_token_revocation_failure(
@@ -514,7 +514,7 @@ class TestUserServiceUpdateUser:
 
         assert_exception_details(exc_info, 400, CurrentPasswordInvalidError)
 
-    async def test_raises_when_email_not_verified(
+    async def test_raises_when_contact_not_verified(
         self,
         make_user: Callable[..., User],
         test_email_alt: str,
@@ -524,7 +524,7 @@ class TestUserServiceUpdateUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
-        verification_service_mock.verify_operation_token.side_effect = EmailNotVerifiedError()
+        verification_service_mock.verify_operation_token.side_effect = ContactNotVerifiedError()
 
         existing_user = make_user(user_id=test_uuids["user_1"])
         user_repo_mock.get_by_id_for_update.return_value = existing_user
@@ -535,14 +535,14 @@ class TestUserServiceUpdateUser:
             token_service=token_service_mock,
         )
 
-        with pytest.raises(EmailNotVerifiedError) as exc_info:
+        with pytest.raises(ContactNotVerifiedError) as exc_info:
             await service.update_user(
                 user_id=existing_user.id,
                 email=test_email_alt,
                 verification_token="a" * 43,
             )
 
-        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        assert_exception_details(exc_info, 400, ContactNotVerifiedError)
         token_service_mock.revoke_active_tokens.assert_not_called()
 
     async def test_raises_when_email_already_exists_on_update(

@@ -17,7 +17,7 @@ from .users import (
     UserNotFoundError,
 )
 from .verifications import (
-    EmailNotVerifiedError,
+    ContactNotVerifiedError,
     VerificationAttemptsLimitExceededError,
     VerificationCooldownError,
     VerificationInvalidOTPError,
@@ -36,7 +36,7 @@ __all__ = [
     "CurrentPasswordInvalidError",
     "CurrentPasswordRequiredError",
     "EmailAlreadyExistsError",
-    "EmailNotVerifiedError",
+    "ContactNotVerifiedError",
     "InvalidCredentialsError",
     "UserBannedError",
     "UserNotFoundError",

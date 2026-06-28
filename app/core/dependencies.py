@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.notifications import EmailSender, StubEmailSender
+from app.core.notifications import OTPSender, StubOTPSender
 from app.core.security import hash_token
 from app.models.database import AsyncSessionLocal
 from app.models.domain import UserRole
@@ -56,7 +56,7 @@ def get_user_service(
 ) -> UserService:
     user_repo = UserRepository(session=db)
     verification_repo = VerificationRepository(redis=redis_client)
-    verification_service = VerificationService(verification_repo, get_email_sender())
+    verification_service = VerificationService(verification_repo, get_otp_sender())
     token_repo = TokenRepository(redis=redis_client)
     user_repo_for_tokens = UserRepository(session=db)
     token_service = TokenService(user_repo=user_repo_for_tokens, token_repo=token_repo)
@@ -73,7 +73,7 @@ def get_password_service(
 ) -> PasswordService:
     user_repo = UserRepository(session=db)
     verification_repo = VerificationRepository(redis=redis_client)
-    verification_service = VerificationService(verification_repo, get_email_sender())
+    verification_service = VerificationService(verification_repo, get_otp_sender())
     token_repo = TokenRepository(redis=redis_client)
     user_repo_for_tokens = UserRepository(session=db)
     token_service = TokenService(user_repo=user_repo_for_tokens, token_repo=token_repo)
@@ -93,19 +93,19 @@ def get_token_service(
     return TokenService(user_repo=user_repo, token_repo=token_repo)
 
 
-def get_email_sender() -> EmailSender:
-    return StubEmailSender()
+def get_otp_sender() -> OTPSender:
+    return StubOTPSender()
 
 
 def get_verification_service(
     redis_client: Annotated[Redis, Depends(get_redis)],
     db: Annotated[AsyncSession, Depends(get_db)],
-    email_sender: Annotated[EmailSender, Depends(get_email_sender)],
+    otp_sender: Annotated[OTPSender, Depends(get_otp_sender)],
 ) -> VerificationService:
     verification_repo = VerificationRepository(redis=redis_client)
     return VerificationService(
         verification_repo=verification_repo,
-        email_sender=email_sender,
+        otp_sender=otp_sender,
     )
 
 

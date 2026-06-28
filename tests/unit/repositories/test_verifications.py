@@ -34,15 +34,15 @@ class TestVerificationRepository:
         redis_mock.incr.assert_awaited_once_with("key")
         redis_mock.expire.assert_not_awaited()
 
-    async def test_get_session_id_by_email_hash(self) -> None:
+    async def test_get_session_id_by_contact_hash(self) -> None:
         redis_mock = AsyncMock()
         redis_mock.get.return_value = "session_123"
         repo = VerificationRepository(redis=redis_mock)
 
-        result = await repo.get_session_id_by_email_hash("hash_123")
+        result = await repo.get_session_id_by_contact_hash("hash_123")
 
         assert result == "session_123"
-        redis_mock.get.assert_awaited_once_with("verification:email:hash_123")
+        redis_mock.get.assert_awaited_once_with("verification:contact:hash_123")
 
     async def test_get_session_ttl(self) -> None:
         redis_mock = AsyncMock()
@@ -57,7 +57,7 @@ class TestVerificationRepository:
     async def test_get_session_returns_data_when_exists(self) -> None:
         redis_mock = AsyncMock()
         session_data = VerificationSessionData(
-            email="test@example.com",
+            contact="test@example.com",
             otp="123456",
             action_type=VerificationActionType.USER_CREATION,
             request_count=1,
@@ -87,7 +87,7 @@ class TestVerificationRepository:
         repo = VerificationRepository(redis=redis_mock)
 
         data = VerificationSessionData(
-            email="test@example.com",
+            contact="test@example.com",
             otp="123456",
             action_type=VerificationActionType.USER_CREATION,
             request_count=1,
@@ -96,7 +96,7 @@ class TestVerificationRepository:
         await repo.create_session("sess_id", "hash", data, 3600)
 
         pipe_mock.set.assert_any_await("verification:sess_id", data.model_dump_json(), ex=3600)
-        pipe_mock.set.assert_any_await("verification:email:hash", "sess_id", ex=3600)
+        pipe_mock.set.assert_any_await("verification:contact:hash", "sess_id", ex=3600)
         pipe_mock.execute.assert_awaited_once()
 
     async def test_update_session_uses_pipeline_with_keepttl(
@@ -106,7 +106,7 @@ class TestVerificationRepository:
         repo = VerificationRepository(redis=redis_mock)
 
         data = VerificationSessionData(
-            email="test@example.com",
+            contact="test@example.com",
             otp="123456",
             action_type=VerificationActionType.USER_CREATION,
             request_count=2,
@@ -115,7 +115,7 @@ class TestVerificationRepository:
         await repo.update_session("sess_id", "hash", data)
 
         pipe_mock.set.assert_any_await("verification:sess_id", data.model_dump_json(), keepttl=True)
-        pipe_mock.set.assert_any_await("verification:email:hash", "sess_id", keepttl=True)
+        pipe_mock.set.assert_any_await("verification:contact:hash", "sess_id", keepttl=True)
         pipe_mock.execute.assert_awaited_once()
 
     async def test_delete_session_uses_pipeline(
@@ -127,7 +127,7 @@ class TestVerificationRepository:
         await repo.delete_session("sess_id", "hash")
 
         pipe_mock.delete.assert_any_await("verification:sess_id")
-        pipe_mock.delete.assert_any_await("verification:email:hash")
+        pipe_mock.delete.assert_any_await("verification:contact:hash")
         pipe_mock.execute.assert_awaited_once()
 
     async def test_save_token(self) -> None:
@@ -135,7 +135,7 @@ class TestVerificationRepository:
         repo = VerificationRepository(redis=redis_mock)
 
         data = VerificationTokenData(
-            email="test@example.com", action_type=VerificationActionType.USER_CREATION
+            contact="test@example.com", action_type=VerificationActionType.USER_CREATION
         )
         await repo.save_token("token_hash", data, 3600)
 
@@ -146,7 +146,7 @@ class TestVerificationRepository:
     async def test_get_token_returns_data_when_exists(self) -> None:
         redis_mock = AsyncMock()
         token_data = VerificationTokenData(
-            email="test@example.com", action_type=VerificationActionType.USER_CREATION
+            contact="test@example.com", action_type=VerificationActionType.USER_CREATION
         )
         redis_mock.get.return_value = token_data.model_dump_json()
         repo = VerificationRepository(redis=redis_mock)

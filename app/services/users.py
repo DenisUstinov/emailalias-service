@@ -56,7 +56,7 @@ class UserService:
     async def create_user(self, request: UserCreateRequest) -> UserCreateResponse:
         await self.verification_service.verify_operation_token(
             token=request.verification_token,
-            email=request.email,
+            contact=request.email,
             expected_action=VerificationActionType.USER_CREATION,
         )
 
@@ -101,7 +101,7 @@ class UserService:
         if user:
             await self.verification_service.verify_operation_token(
                 token=verification_token,
-                email=user.email,
+                contact=user.email,
                 expected_action=VerificationActionType.USER_DELETION,
             )
             await self.user_repo.delete(user_id)
@@ -169,7 +169,7 @@ class UserService:
         if email is not None:
             await self.verification_service.verify_operation_token(
                 token=verification_token,
-                email=email,
+                contact=email,
                 expected_action=VerificationActionType.EMAIL_CHANGE,
             )
 

@@ -3,9 +3,9 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from app.core.exceptions import (
+    ContactNotVerifiedError,
     CurrentPasswordInvalidError,
     EmailAlreadyExistsError,
-    EmailNotVerifiedError,
     UserBannedError,
     UserNotFoundError,
 )
@@ -320,7 +320,7 @@ class TestUpdateUserMe:
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)
 
-    async def test_business_error_email_not_verified(
+    async def test_business_error_contact_not_verified(
         self,
         http_client: AsyncClient,
         authenticated_headers,
@@ -339,12 +339,12 @@ class TestUpdateUserMe:
         data = response.json()
         assert isinstance(data["status"], int)
         assert data["status"] == 400
-        assert data["detail"] == EmailNotVerifiedError().detail
+        assert data["detail"] == ContactNotVerifiedError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)
 
-    async def test_business_error_email_not_verified_false(
+    async def test_business_error_contact_not_verified_false(
         self,
         http_client: AsyncClient,
         authenticated_headers,
@@ -371,7 +371,7 @@ class TestUpdateUserMe:
         data = response.json()
         assert isinstance(data["status"], int)
         assert data["status"] == 400
-        assert data["detail"] == EmailNotVerifiedError().detail
+        assert data["detail"] == ContactNotVerifiedError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)

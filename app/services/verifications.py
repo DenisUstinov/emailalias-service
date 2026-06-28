@@ -4,7 +4,7 @@ import uuid
 
 from app.core.config import settings
 from app.core.exceptions import (
-    EmailNotVerifiedError,
+    ContactNotVerifiedError,
     VerificationAttemptsLimitExceededError,
     VerificationCooldownError,
     VerificationInvalidOTPError,
@@ -12,8 +12,8 @@ from app.core.exceptions import (
     VerificationMaxRequestsExceededError,
     VerificationSessionNotFoundError,
 )
-from app.core.notifications import EmailSender
-from app.core.security import hash_email, hash_token
+from app.core.notifications import OTPSender
+from app.core.security import hash_contact, hash_token
 from app.repositories.verification import VerificationRepository
 from app.schemas.verification import (
     VerificationActionType,
@@ -25,17 +25,15 @@ logger = logging.getLogger(__name__)
 
 
 class VerificationService:
-    def __init__(
-        self, verification_repo: VerificationRepository, email_sender: EmailSender
-    ) -> None:
+    def __init__(self, verification_repo: VerificationRepository, otp_sender: OTPSender) -> None:
         self.verification_repo = verification_repo
-        self.email_sender = email_sender
+        self.otp_sender = otp_sender
 
     async def create_verification(
-        self, email: str, action_type: VerificationActionType
+        self, contact: str, action_type: VerificationActionType
     ) -> dict[str, str | int]:
-        email_hash = hash_email(email)
-        session_id = await self.verification_repo.get_session_id_by_email_hash(email_hash)
+        contact_hash = hash_contact(contact)
+        session_id = await self.verification_repo.get_session_id_by_contact_hash(contact_hash)
 
         existing_session = None
         if session_id:
@@ -46,7 +44,7 @@ class VerificationService:
                     remaining = settings.VERIFICATION_COOLDOWN_SECONDS - elapsed
                     logger.warning(
                         "Verification blocked: cooldown not elapsed",
-                        extra={"email": email, "remaining_seconds": remaining},
+                        extra={"contact": contact, "remaining_seconds": remaining},
                     )
                     raise VerificationCooldownError(remaining)
 
@@ -57,18 +55,18 @@ class VerificationService:
             ):
                 logger.warning(
                     "Verification blocked: max check attempts exceeded",
-                    extra={"email": email, "attempts": existing_session.check_attempts},
+                    extra={"contact": contact, "attempts": existing_session.check_attempts},
                 )
                 raise VerificationMaxAttemptsExceededError()
 
-        rate_limit_key = f"rate_limit:otp:{email_hash}"
+        rate_limit_key = f"rate_limit:otp:{contact_hash}"
         count = await self.verification_repo.increment_rate_limit(
             rate_limit_key, settings.OTP_RATE_LIMIT_TTL_SECONDS
         )
         if count > settings.VERIFICATION_MAX_REQUEST_COUNT:
             logger.warning(
                 "Verification blocked: rate limit exceeded",
-                extra={"email": email, "count": count},
+                extra={"contact": contact, "count": count},
             )
             raise VerificationMaxRequestsExceededError()
 
@@ -76,31 +74,31 @@ class VerificationService:
 
         if existing_session:
             updated_session = VerificationSessionData(
-                email=email,
+                contact=contact,
                 otp=otp,
                 action_type=action_type,
                 request_count=existing_session.request_count + 1,
                 check_attempts=existing_session.check_attempts,
             )
-            await self.verification_repo.update_session(session_id, email_hash, updated_session)
+            await self.verification_repo.update_session(session_id, contact_hash, updated_session)
         else:
             session_id = str(uuid.uuid4())
             initial_session = VerificationSessionData(
-                email=email,
+                contact=contact,
                 otp=otp,
                 action_type=action_type,
                 request_count=1,
                 check_attempts=0,
             )
             await self.verification_repo.create_session(
-                session_id, email_hash, initial_session, settings.VERIFICATION_TTL_SECONDS
+                session_id, contact_hash, initial_session, settings.VERIFICATION_TTL_SECONDS
             )
 
-        await self.email_sender.send_otp(email, otp)
+        await self.otp_sender.send_otp(contact, otp)
         logger.info(
             "OTP sent successfully",
             extra={
-                "email": email,
+                "contact": contact,
                 "is_resend": bool(existing_session),
                 "verification_id": session_id,
             },
@@ -125,19 +123,18 @@ class VerificationService:
             )
             raise VerificationAttemptsLimitExceededError()
 
-        email_hash = hash_email(session.email)
+        contact_hash = hash_contact(session.contact)
 
-        # TODO: Хэшировать ОТП код
         if otp_code != session.otp:
             updated_session = VerificationSessionData(
-                email=session.email,
+                contact=session.contact,
                 otp=session.otp,
                 action_type=session.action_type,
                 request_count=session.request_count,
                 check_attempts=session.check_attempts + 1,
             )
             await self.verification_repo.update_session(
-                verification_id, email_hash, updated_session
+                verification_id, contact_hash, updated_session
             )
             remaining = settings.VERIFICATION_MAX_CHECK_ATTEMPTS - updated_session.check_attempts
             logger.warning(
@@ -150,18 +147,18 @@ class VerificationService:
             )
             raise VerificationInvalidOTPError(attempts_remaining=remaining)
 
-        await self.verification_repo.delete_session(verification_id, email_hash)
+        await self.verification_repo.delete_session(verification_id, contact_hash)
 
         raw_token = secrets.token_urlsafe(32)
         hashed_token = hash_token(raw_token)
-        token_data = VerificationTokenData(email=session.email, action_type=session.action_type)
+        token_data = VerificationTokenData(contact=session.contact, action_type=session.action_type)
         await self.verification_repo.save_token(
             hashed_token, token_data, settings.VERIFICATION_TOKEN_TTL_SECONDS
         )
 
         logger.info(
-            "Email successfully verified and token issued",
-            extra={"email": session.email, "action_type": session.action_type},
+            "Contact successfully verified and token issued",
+            extra={"contact": session.contact, "action_type": session.action_type},
         )
         return {
             "verification_token": raw_token,
@@ -173,7 +170,7 @@ class VerificationService:
         return f"{secrets.randbelow(900000) + 100000:06d}"
 
     async def verify_operation_token(
-        self, token: str, email: str, expected_action: VerificationActionType
+        self, token: str, contact: str, expected_action: VerificationActionType
     ) -> None:
         token_hash = hash_token(token)
         token_data = await self.verification_repo.get_token(token_hash)
@@ -181,29 +178,29 @@ class VerificationService:
         if token_data is None:
             logger.warning(
                 "Verification token not found or expired",
-                extra={"email": email, "action_type": expected_action.value},
+                extra={"contact": contact, "action_type": expected_action.value},
             )
-            raise EmailNotVerifiedError()
+            raise ContactNotVerifiedError()
 
         if token_data.action_type != expected_action:
             logger.warning(
                 "Verification token action type mismatch",
                 extra={
-                    "email": email,
+                    "contact": contact,
                     "expected_action": expected_action.value,
                     "actual_action": token_data.action_type.value,
                 },
             )
-            raise EmailNotVerifiedError()
+            raise ContactNotVerifiedError()
 
-        if token_data.email != email:
+        if token_data.contact != contact:
             logger.warning(
-                "Verification token email mismatch",
+                "Verification token contact mismatch",
                 extra={
-                    "provided_email": email,
-                    "token_email": token_data.email,
+                    "provided_contact": contact,
+                    "token_contact": token_data.contact,
                 },
             )
-            raise EmailNotVerifiedError()
+            raise ContactNotVerifiedError()
 
         await self.verification_repo.delete_token(token_hash)

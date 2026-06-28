@@ -5,7 +5,7 @@ from uuid import UUID
 import pytest
 
 from app.core.exceptions import (
-    EmailNotVerifiedError,
+    ContactNotVerifiedError,
     UserBannedError,
     UserNotFoundError,
 )
@@ -59,7 +59,7 @@ class TestPasswordServiceUpdatePassword:
         )
         token_service.revoke_active_tokens.assert_awaited_once_with(user.id)
 
-    async def test_raises_when_email_not_verified(
+    async def test_raises_when_contact_not_verified(
         self,
         test_email: str,
         new_valid_test_password: str,
@@ -67,7 +67,7 @@ class TestPasswordServiceUpdatePassword:
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
-        verification_service.verify_operation_token.side_effect = EmailNotVerifiedError()
+        verification_service.verify_operation_token.side_effect = ContactNotVerifiedError()
 
         service = PasswordService(
             user_repo=user_repo,
@@ -81,10 +81,10 @@ class TestPasswordServiceUpdatePassword:
             verification_token="a" * 43,
         )
 
-        with pytest.raises(EmailNotVerifiedError) as exc_info:
+        with pytest.raises(ContactNotVerifiedError) as exc_info:
             await service.update_password(request=request)
 
-        assert_exception_details(exc_info, 400, EmailNotVerifiedError)
+        assert_exception_details(exc_info, 400, ContactNotVerifiedError)
         user_repo.get_by_email_for_update.assert_not_awaited()
 
     async def test_raises_when_user_not_found(

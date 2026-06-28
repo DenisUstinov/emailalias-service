@@ -150,7 +150,7 @@ async def create_verification_token(
         token_hash = hash_token(token)
         token_key = f"vtoken:{token_hash}"
         token_data = VerificationTokenData(
-            email=email,
+            contact=email,
             action_type=action_type,
         )
         await redis_client.set(

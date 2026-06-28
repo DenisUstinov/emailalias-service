@@ -17,11 +17,11 @@ router = APIRouter()
     "/{verification_id}",
     response_model=VerificationConfirmResponse,
     status_code=status.HTTP_200_OK,
-    summary="Confirm email verification",
-    description="Verify ownership of email address by submitting the OTP code received via email \
+    summary="Confirm contact verification",
+    description="Verify ownership of a contact (email or phone) by submitting the OTP code \
     using the verification session identifier.",
     responses={
-        200: {"description": "Email successfully verified, verification token issued"},
+        200: {"description": "Contact successfully verified, verification token issued"},
         400: {"description": "Invalid OTP or verification attempts limit exceeded"},
         404: {"description": "Verification session not found or expired"},
         422: {"description": "Validation error in request data"},
@@ -49,9 +49,9 @@ async def confirm_verification(
     "",
     response_model=VerificationCreateResponse,
     status_code=status.HTTP_200_OK,
-    summary="Initiate email verification",
-    description="Send an OTP code to the specified email address to verify ownership for a \
-    specific action.",
+    summary="Initiate contact verification",
+    description="Send an OTP code to the specified contact (email or phone) to verify ownership \
+    for a specific action.",
     responses={
         200: {"description": "OTP successfully sent"},
         400: {"description": "Cooldown not elapsed or limits exceeded"},
@@ -66,7 +66,7 @@ async def create_verification(
     service: Annotated[VerificationService, Depends(get_verification_service)],
 ) -> VerificationCreateResponse:
     result = await service.create_verification(
-        email=data.email,
+        contact=data.email,
         action_type=data.action_type,
     )
     return VerificationCreateResponse(

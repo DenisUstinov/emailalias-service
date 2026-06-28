@@ -23,7 +23,7 @@ class VerificationMaxRequestsExceededError(AppException):
     def __init__(self) -> None:
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Maximum OTP requests reached for this email",
+            detail="Maximum OTP requests reached for this contact",
         )
 
 
@@ -51,9 +51,9 @@ class VerificationInvalidOTPError(AppException):
         )
 
 
-class EmailNotVerifiedError(AppException):
+class ContactNotVerifiedError(AppException):
     def __init__(self) -> None:
         super().__init__(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email not verified. Please verify your email before registration.",
+            detail="Contact not verified. Please verify your contact before proceeding.",
         )

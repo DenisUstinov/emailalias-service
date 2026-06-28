@@ -11,8 +11,11 @@ class VerificationActionType(StrEnum):
 
 
 class VerificationSessionData(BaseModel):
-    email: str = Field(..., description="Email address associated with this verification session")
-    otp: str = Field(..., description="One-time password for email verification")
+    contact: str = Field(
+        ...,
+        description="Contact identifier (email or phone) associated with this verification session",
+    )
+    otp: str = Field(..., description="One-time password for verification")
     action_type: VerificationActionType = Field(
         ..., description="Purpose of the verification session"
     )
@@ -22,7 +25,7 @@ class VerificationSessionData(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "email": "user@example.com",
+                "contact": "user@example.com",
                 "otp": "847291",
                 "action_type": "user_creation",
                 "request_count": 1,
@@ -33,7 +36,7 @@ class VerificationSessionData(BaseModel):
 
 
 class VerificationTokenData(BaseModel):
-    email: str = Field(..., description="Email address verified by this token")
+    contact: str = Field(..., description="Contact identifier verified by this token")
     action_type: VerificationActionType = Field(
         ..., description="Purpose of the verification token"
     )
@@ -41,7 +44,7 @@ class VerificationTokenData(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "email": "user@example.com",
+                "contact": "user@example.com",
                 "action_type": "user_creation",
             }
         }

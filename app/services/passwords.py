@@ -29,7 +29,7 @@ class PasswordService:
     async def update_password(self, request: PasswordUpdateRequest) -> None:
         await self.verification_service.verify_operation_token(
             token=request.verification_token,
-            email=request.email,
+            contact=request.email,
             expected_action=VerificationActionType.PASSWORD_RESET,
         )
 

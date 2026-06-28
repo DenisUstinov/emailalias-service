@@ -8,7 +8,7 @@ from app.core.exceptions import (
     VerificationInvalidOTPError,
     VerificationSessionNotFoundError,
 )
-from app.core.security import hash_email, hash_token
+from app.core.security import hash_contact, hash_token
 from app.schemas.responses import VerificationConfirmResponse
 from app.schemas.verification import (
     VerificationActionType,
@@ -41,16 +41,16 @@ class TestConfirmVerification:
         stored_session = await redis_client.get(f"verification:{verification_id}")
         assert stored_session is None
 
-        email_hash = hash_email(email)
-        stored_email_key = await redis_client.get(f"verification:email:{email_hash}")
-        assert stored_email_key is None
+        contact_hash = hash_contact(email)
+        stored_contact_key = await redis_client.get(f"verification:contact:{contact_hash}")
+        assert stored_contact_key is None
 
         token_hash = hash_token(data.verification_token)
         token_key = f"vtoken:{token_hash}"
         stored_token_data = await redis_client.get(token_key)
         assert stored_token_data is not None
         token_data = VerificationTokenData.model_validate_json(stored_token_data)
-        assert token_data.email == email
+        assert token_data.contact == email
         assert token_data.action_type == action_type
 
     async def test_idempotency_second_call_returns_not_found(
@@ -190,10 +190,10 @@ class TestConfirmVerification:
         await create_verification_session(email, verification_id, action_type, otp_code, ttl=1)
 
         session_key = f"verification:{verification_id}"
-        email_hash = hash_email(email)
-        email_key = f"verification:email:{email_hash}"
+        contact_hash = hash_contact(email)
+        contact_key = f"verification:contact:{contact_hash}"
         await redis_client.expire(session_key, 0)
-        await redis_client.expire(email_key, 0)
+        await redis_client.expire(contact_key, 0)
 
         payload = {"otp_code": otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
