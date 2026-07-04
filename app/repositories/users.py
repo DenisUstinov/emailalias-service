@@ -16,6 +16,11 @@ class UserRepository:
         await self.session.refresh(user)
         return user
 
+    async def get_by_id(self, user_id: uuid.UUID) -> User:
+        stmt = select(User).where(User.id == user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
     async def get_by_email(self, email: str) -> User | None:
         stmt = select(User).where(
             User.email == email,

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 
-from app.models.domain import Alias
+from app.models.domain import Alias, AliasStatus
 
 
 class AliasRepository:
@@ -24,3 +24,13 @@ class AliasRepository:
         )
         result = await self.session.execute(stmt)
         return result.scalar_one()
+
+    async def get_by_id(self, alias_id: uuid.UUID) -> Alias:
+        stmt = select(Alias).where(Alias.id == alias_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
+    async def update_status(self, alias_id: uuid.UUID, status: AliasStatus) -> None:
+        alias = await self.get_by_id(alias_id)
+        alias.status = status
+        await self.session.flush()

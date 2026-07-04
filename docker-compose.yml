@@ -6,6 +6,12 @@ services:
       target: runtime
     ports:
       - "${PORT}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - SERVICE_NAME=${SERVICE_NAME}
@@ -19,6 +25,49 @@ services:
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - BEGET_LOGIN=${BEGET_LOGIN}
+      - BEGET_PASSWORD=${BEGET_PASSWORD}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    command: ["celery", "-A", "app.infrastructure.celery.app", "worker", "--loglevel=info"]
+    environment:
+      - SECRET_KEY=${SECRET_KEY}
+      - SERVICE_NAME=${SERVICE_NAME}
+      - SERVICE_DESCRIPTION=${SERVICE_DESCRIPTION}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - REDIS_URL=${REDIS_URL}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - BEGET_LOGIN=${BEGET_LOGIN}
+      - BEGET_PASSWORD=${BEGET_PASSWORD}
     restart: unless-stopped
     depends_on:
       postgres:

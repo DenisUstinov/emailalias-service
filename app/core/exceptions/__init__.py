@@ -7,6 +7,8 @@ from .aliases import (
 from .base import AppException
 from .common import (
     AuthenticationRequiredError,
+    ExternalProviderRejectionError,
+    ExternalProviderUnavailableError,
     InvalidCredentialsError,
 )
 from .users import (
@@ -36,6 +38,8 @@ __all__ = [
     "CurrentPasswordInvalidError",
     "CurrentPasswordRequiredError",
     "EmailAlreadyExistsError",
+    "ExternalProviderRejectionError",
+    "ExternalProviderUnavailableError",
     "ContactNotVerifiedError",
     "InvalidCredentialsError",
     "UserBannedError",

@@ -1,12 +1,15 @@
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
+from freezegun import freeze_time
 from httpx import AsyncClient
 from sqlalchemy import insert, select
 
 from app.core.config import settings
 from app.core.exceptions import (
+    AliasCollisionError,
     AliasDomainNotFoundError,
     AliasMonthlyLimitExceededError,
     AliasPremiumDomainRequiresSubscriptionError,
@@ -17,31 +20,85 @@ from app.schemas.responses import AliasCreateResponse
 
 @pytest.mark.anyio
 class TestCreateAlias:
-    async def test_success_creates_alias(
+    async def test_success_creates_alias_and_queues_tasks(
         self,
         http_client: AsyncClient,
         db_session,
         create_test_domain,
         authenticated_headers,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import aliases
+
+        mock_workflow = MagicMock()
+        mock_chain = MagicMock(return_value=mock_workflow)
+        monkeypatch.setattr(aliases, "chain", mock_chain)
+
         domain = await create_test_domain(fqdn="success-test.com", is_default=True)
         headers = await authenticated_headers()
 
         payload = {"domain_id": str(domain.id), "local_part": "newsletter"}
         response = await http_client.post("/api/v1/aliases", json=payload, headers=headers)
 
-        assert response.status_code == 201
+        assert response.status_code == 202
         data = AliasCreateResponse(**response.json())
         assert data.id is not None
+        assert data.status == "pending"
         assert data.email.endswith("@success-test.com")
         assert data.email.startswith("newsletter.")
         assert data.created_at is not None
+
+        mock_chain.assert_called_once()
+        mock_workflow.apply_async.assert_called_once()
 
         result = await db_session.execute(select(Alias).where(Alias.id == data.id))
         created_alias = result.scalar_one_or_none()
         assert created_alias is not None
         assert created_alias.status == AliasStatus.PENDING
         assert created_alias.local_part == "newsletter"
+
+    async def test_business_error_collision(
+        self,
+        http_client: AsyncClient,
+        db_session,
+        create_test_domain,
+        create_test_user,
+        authenticated_headers,
+        monkeypatch,
+    ) -> None:
+        from app.services import aliases as aliases_service_module
+
+        domain = await create_test_domain(fqdn="collision-test.com", is_default=True)
+        user = await create_test_user(password="TestP@ss123!")
+        headers = await authenticated_headers()
+
+        stmt = insert(Alias).values(
+            user_id=user.id,
+            domain_id=domain.id,
+            local_part="duplicate",
+            random_part="abc123",
+            status=AliasStatus.ACTIVE,
+        )
+        await db_session.execute(stmt)
+        await db_session.flush()
+
+        monkeypatch.setattr(
+            aliases_service_module.AliasService,
+            "_generate_random_part",
+            staticmethod(lambda: "abc123"),
+        )
+
+        payload = {"domain_id": str(domain.id), "local_part": "duplicate"}
+        response = await http_client.post("/api/v1/aliases", json=payload, headers=headers)
+
+        assert response.status_code == 409
+        data = response.json()
+        assert data["status"] == 409
+        assert isinstance(data["detail"], str)
+        assert data["detail"] == AliasCollisionError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
 
     @pytest.mark.parametrize(
         "payload",
@@ -100,6 +157,7 @@ class TestCreateAlias:
         assert response.status_code == 404
         data = response.json()
         assert data["status"] == 404
+        assert isinstance(data["detail"], str)
         assert data["detail"] == AliasDomainNotFoundError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
@@ -119,11 +177,13 @@ class TestCreateAlias:
         assert response.status_code == 403
         data = response.json()
         assert data["status"] == 403
+        assert isinstance(data["detail"], str)
         assert data["detail"] == AliasPremiumDomainRequiresSubscriptionError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)
 
+    @freeze_time("2026-01-01T12:00:00Z")
     async def test_business_error_monthly_limit_exceeded(
         self,
         http_client: AsyncClient,
@@ -155,6 +215,7 @@ class TestCreateAlias:
         assert response.status_code == 402
         data = response.json()
         assert data["status"] == 402
+        assert isinstance(data["detail"], str)
         assert data["detail"] == AliasMonthlyLimitExceededError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)

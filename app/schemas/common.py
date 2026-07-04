@@ -42,13 +42,14 @@ OtpCode = Annotated[
 
 
 def _validate_alias_local_part(value: str) -> str:
+    value = value.lower()
+
     if not value:
         raise ValueError("Local part cannot be empty.")
 
     if len(value) > 57:
         raise ValueError(
-            "Local part must be at most 57 characters long to accommodate the random \
-        suffix."
+            "Local part must be at most 57 characters long to accommodate the random suffix."
         )
 
     if value.startswith(".") or value.endswith("."):
@@ -57,7 +58,7 @@ def _validate_alias_local_part(value: str) -> str:
     if ".." in value:
         raise ValueError("Local part cannot contain consecutive dots.")
 
-    if not re.match(r"^[a-zA-Z0-9!#$%&'*+\-/=?^_`{|}~.]+$", value):
+    if not re.match(r"^[a-z0-9!#$%&'*+\-/=?^_`{|}~.]+$", value):
         raise ValueError("Local part contains invalid characters.")
 
     return value
@@ -68,6 +69,6 @@ AliasLocalPart = Annotated[
     AfterValidator(_validate_alias_local_part),
     Field(
         description="Local part of the alias (prefix provided by user). Max 57 chars, RFC 5322 \
-    compliant."
+        compliant."
     ),
 ]

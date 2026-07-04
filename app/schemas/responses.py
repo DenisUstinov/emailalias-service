@@ -8,7 +8,10 @@ from app.models.domain import UserRole
 
 class AliasCreateResponse(BaseModel):
     id: UUID = Field(..., description="Unique identifier of the alias")
-    email: str = Field(..., description="Fully generated email address ready for use")
+    email: str = Field(..., description="Fully generated email address; activation is in progress")
+    status: str = Field(
+        ..., description="Current provisioning status of the alias (pending, active, failed)"
+    )
     created_at: datetime = Field(..., description="Alias creation timestamp in UTC")
 
     model_config = ConfigDict(
@@ -17,6 +20,7 @@ class AliasCreateResponse(BaseModel):
             "example": {
                 "id": "123e4567-e89b-12d3-a456-426614174000",
                 "email": "bugtracker.a3F9x2@example.com",
+                "status": "pending",
                 "created_at": "2026-06-26T10:30:00Z",
             }
         },

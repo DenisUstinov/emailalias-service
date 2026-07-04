@@ -45,4 +45,26 @@ make migrate
 ```bash
 make migrate-new
 # Message: Initial tables
+# Message: Add alias status provisioned
+```
+
+## 5. Инициализация домена по умолчанию
+
+Добавьте домен по умолчанию в базу данных:
+
+```bash
+source .env 2>/dev/null
+docker compose exec postgres psql -U $POSTGRES_USER \
+  -d $POSTGRES_DB \
+  -c "INSERT INTO domains (id, fqdn, is_default) \
+      VALUES (gen_random_uuid(), 'mcpemail.net', true);"
+```
+
+Проверьте, что домен успешно добавлен:
+
+```bash
+source .env 2>/dev/null
+docker compose exec postgres psql -U $POSTGRES_USER \
+  -d $POSTGRES_DB \
+  -c "SELECT id, fqdn, is_default FROM domains;"
 ```

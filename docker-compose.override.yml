@@ -11,6 +11,15 @@ services:
     env_file:
       - .env
 
+  celery-worker:
+    build:
+      target: development
+    command: ["celery", "-A", "app.infrastructure.celery.app", "worker", "--loglevel=info", "--pool=solo"]
+    volumes:
+      - ./app:/app/app
+    env_file:
+      - .env
+
   postgres:
     healthcheck:
       interval: 15s
@@ -26,6 +35,8 @@ services:
       start_period: 15s
 
   rabbitmq:
+    ports:
+      - "15672:15672"
     healthcheck:
       interval: 15s
       timeout: 10s

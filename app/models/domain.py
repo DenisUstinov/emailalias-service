@@ -50,6 +50,7 @@ class User(Base):
 
 class AliasStatus(enum.StrEnum):
     PENDING = "pending"
+    PROVISIONED = "provisioned"
     ACTIVE = "active"
     FAILED = "failed"
     DELETING = "deleting"

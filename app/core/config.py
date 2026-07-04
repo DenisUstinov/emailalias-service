@@ -41,6 +41,30 @@ class Settings(BaseSettings):
     RABBITMQ_USER: str = Field(..., min_length=1)
     RABBITMQ_PASSWORD: SecretStr = Field(..., min_length=16)
 
+    # Celery: Core Settings
+    CELERY_TASK_SERIALIZER: str = "json"
+    CELERY_RESULT_SERIALIZER: str = "json"
+    CELERY_ACCEPT_CONTENT: list[str] = ["json"]
+    CELERY_TIMEZONE: str = "UTC"
+    CELERY_TASK_DEFAULT_QUEUE: str = "default"
+    CELERY_TASK_TRACK_STARTED: bool = True
+
+    # Celery: Reliability & Timeouts (No magic numbers)
+    CELERY_TASK_TIME_LIMIT_SECONDS: int = Field(default=1800, gt=0)
+    CELERY_TASK_MAX_RETRIES: int = Field(default=5, ge=0)
+    CELERY_TASK_RETRY_BACKOFF_SECONDS: int = Field(default=10, gt=0)
+    CELERY_TASK_RETRY_BACKOFF_MAX_SECONDS: int = Field(default=600, gt=0)
+    CELERY_TASK_RETRY_JITTER: bool = True
+
+    # Celery: Observability
+    CELERY_WORKER_SEND_TASK_EVENTS: bool = True
+    CELERY_TASK_SEND_SENT_EVENT: bool = True
+
+    # External Providers (Beget)
+    BEGET_API_URL: str = Field(default="https://api.beget.com/api/mail", min_length=1)
+    BEGET_LOGIN: str = Field(..., min_length=1)
+    BEGET_PASSWORD: SecretStr = Field(..., min_length=1)
+
     # Rate Limiting
     RATE_LIMIT_DEFAULT: str = "60/minute"
     RATE_LIMIT_TOKEN_CREATION: str = "5/minute"
@@ -101,6 +125,14 @@ class Settings(BaseSettings):
     def RABBITMQ_URL(self) -> str:
         pwd = self.RABBITMQ_PASSWORD.get_secret_value()
         return f"amqp://{self.RABBITMQ_USER}:{quote_plus(pwd)}@{self.RABBITMQ_HOST}:5672{self.RABBITMQ_VHOST}"
+
+    @computed_field
+    def CELERY_BROKER_URL(self) -> str:
+        return self.RABBITMQ_URL
+
+    @computed_field
+    def CELERY_RESULT_BACKEND(self) -> str:
+        return self.REDIS_URL
 
 
 @lru_cache
