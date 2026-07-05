@@ -10,7 +10,7 @@ from app.main import app
 @pytest.fixture
 def mock_otp_sender() -> AsyncMock:
     mock = AsyncMock(spec=OTPSender)
-    mock.send_otp = AsyncMock(return_value=None)
+    mock.send = AsyncMock(return_value=None)
     return mock
 
 

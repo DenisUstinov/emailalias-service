@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 from faker import Faker
 from httpx import AsyncClient
@@ -19,15 +21,20 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_otp_sender,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
         email = faker.email().lower()
         action_type = VerificationActionType.USER_CREATION
         payload = {"email": email, "action_type": action_type.value}
 
         response = await http_client.post("/api/v1/verifications", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = VerificationCreateResponse(**response.json())
         verification_id = data.verification_id
 
@@ -50,16 +57,24 @@ class TestCreateVerification:
         rate_limit_count = await redis_client.get(rate_limit_key)
         assert rate_limit_count == "1"
 
-        override_otp_sender.send_otp.assert_awaited_once_with(email, session.otp)
+        mock_task.apply_async.assert_called_once()
+        call_args = mock_task.apply_async.call_args
+        assert call_args[1]["args"][0] == email
+        assert call_args[1]["args"][1] == str(verification_id)
 
     async def test_success_resend_after_cooldown_elapsed(
         self,
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_otp_sender,
         create_verification_session,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
         email = faker.email().lower()
         verification_id = "11111111-1111-1111-1111-111111111111"
         action_type = VerificationActionType.PASSWORD_RESET
@@ -78,7 +93,7 @@ class TestCreateVerification:
         payload = {"email": email, "action_type": action_type.value}
         response = await http_client.post("/api/v1/verifications", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = VerificationCreateResponse(**response.json())
         assert str(data.verification_id) == verification_id
 
@@ -88,16 +103,24 @@ class TestCreateVerification:
         assert updated_session.check_attempts == 0
         assert updated_session.otp != "123456"
 
-        override_otp_sender.send_otp.assert_awaited_once_with(email, updated_session.otp)
+        mock_task.apply_async.assert_called_once()
+        call_args = mock_task.apply_async.call_args
+        assert call_args[1]["args"][0] == email
+        assert call_args[1]["args"][1] == str(verification_id)
 
     async def test_success_creates_new_session_after_ttl_expired(
         self,
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_otp_sender,
         create_verification_session,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
         email = faker.email().lower()
         old_verification_id = "22222222-2222-2222-2222-222222222222"
         action_type = VerificationActionType.EMAIL_CHANGE
@@ -121,7 +144,7 @@ class TestCreateVerification:
         payload = {"email": email, "action_type": action_type.value}
         response = await http_client.post("/api/v1/verifications", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = VerificationCreateResponse(**response.json())
         assert data.verification_id != old_verification_id
 
@@ -132,7 +155,10 @@ class TestCreateVerification:
         assert new_session.otp != "654321"
         assert new_session.check_attempts == 0
 
-        override_otp_sender.send_otp.assert_awaited_once_with(email, new_session.otp)
+        mock_task.apply_async.assert_called_once()
+        call_args = mock_task.apply_async.call_args
+        assert call_args[1]["args"][0] == email
+        assert call_args[1]["args"][1] == str(data.verification_id)
 
     @pytest.mark.parametrize(
         "payload",
@@ -215,15 +241,20 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_otp_sender,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
         email_original = "Test@Example.COM"
         email_lower = email_original.lower()
         action_type = VerificationActionType.USER_CREATION
 
         payload_first = {"email": email_original, "action_type": action_type.value}
         response_first = await http_client.post("/api/v1/verifications", json=payload_first)
-        assert response_first.status_code == 200
+        assert response_first.status_code == 202
         first_data = VerificationCreateResponse(**response_first.json())
         first_id = first_data.verification_id
 
@@ -239,7 +270,7 @@ class TestCreateVerification:
 
         payload_second = {"email": email_lower, "action_type": action_type.value}
         response_second = await http_client.post("/api/v1/verifications", json=payload_second)
-        assert response_second.status_code == 200
+        assert response_second.status_code == 202
         second_data = VerificationCreateResponse(**response_second.json())
         second_id = second_data.verification_id
 
@@ -254,14 +285,19 @@ class TestCreateVerification:
         http_client: AsyncClient,
         redis_client,
         faker: Faker,
-        override_otp_sender,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
         email = faker.email().lower()
         action_type = VerificationActionType.USER_CREATION
         payload = {"email": email, "action_type": action_type.value}
 
         response = await http_client.post("/api/v1/verifications", json=payload)
-        assert response.status_code == 200
+        assert response.status_code == 202
         data = VerificationCreateResponse(**response.json())
 
         assert len(str(data.verification_id)) == 36

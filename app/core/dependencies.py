@@ -7,9 +7,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.notifications import OTPSender, StubOTPSender
+from app.core.notifications import OTPSender
 from app.core.security import hash_token
 from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
+from app.infrastructure.stub_otp_sender import StubOTPSender
 from app.models.database import AsyncSessionLocal
 from app.models.domain import UserRole
 from app.repositories.aliases import AliasRepository

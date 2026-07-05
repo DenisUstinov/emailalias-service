@@ -12,6 +12,7 @@ from app.core.exceptions import (
     VerificationMaxRequestsExceededError,
     VerificationSessionNotFoundError,
 )
+from app.schemas.responses import VerificationConfirmResponse, VerificationCreateResponse
 from app.schemas.verification import (
     VerificationActionType,
     VerificationSessionData,
@@ -39,10 +40,41 @@ class TestVerificationServiceCreate:
                 "test@example.com", VerificationActionType.USER_CREATION
             )
 
-        assert "verification_id" in result
-        assert result["expires_in"] == settings.VERIFICATION_TTL_SECONDS
+        assert isinstance(result, VerificationCreateResponse)
+        assert result.expires_in == settings.VERIFICATION_TTL_SECONDS
         repo_mock.create_session.assert_awaited_once()
-        otp_sender_mock.send_otp.assert_awaited_once_with("test@example.com", "123456")
+        otp_sender_mock.send.assert_not_awaited()
+
+    async def test_success_send_otp_calls_sender(self) -> None:
+        repo_mock = AsyncMock()
+        otp_sender_mock = AsyncMock()
+        session = VerificationSessionData(
+            contact="test@example.com",
+            otp="123456",
+            action_type=VerificationActionType.USER_CREATION,
+            request_count=1,
+            check_attempts=0,
+        )
+        repo_mock.get_session.return_value = session
+
+        service = VerificationService(verification_repo=repo_mock, otp_sender=otp_sender_mock)
+
+        await service.send_otp("11111111-1111-1111-1111-111111111111", "test@example.com")
+
+        repo_mock.get_session.assert_awaited_once_with("11111111-1111-1111-1111-111111111111")
+        otp_sender_mock.send.assert_awaited_once_with("test@example.com", "123456")
+
+    async def test_send_otp_returns_early_if_session_missing(self) -> None:
+        repo_mock = AsyncMock()
+        otp_sender_mock = AsyncMock()
+        repo_mock.get_session.return_value = None
+
+        service = VerificationService(verification_repo=repo_mock, otp_sender=otp_sender_mock)
+
+        await service.send_otp("missing_sess_id", "test@example.com")
+
+        repo_mock.get_session.assert_awaited_once_with("missing_sess_id")
+        otp_sender_mock.send.assert_not_awaited()
 
     async def test_success_resends_otp_updates_session(self) -> None:
         repo_mock = AsyncMock()
@@ -55,7 +87,9 @@ class TestVerificationServiceCreate:
             request_count=1,
             check_attempts=0,
         )
-        repo_mock.get_session_id_by_contact_hash.return_value = "sess_id"
+        repo_mock.get_session_id_by_contact_hash.return_value = (
+            "11111111-1111-1111-1111-111111111111"
+        )
         repo_mock.get_session_ttl.return_value = (
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
         )
@@ -76,11 +110,14 @@ class TestVerificationServiceCreate:
         updated_data = repo_mock.update_session.call_args[0][2]
         assert updated_data.request_count == 2
         assert updated_data.otp == "654321"
+        otp_sender_mock.send.assert_not_awaited()
 
     async def test_raises_cooldown_when_not_elapsed(self) -> None:
         repo_mock = AsyncMock()
         otp_sender_mock = AsyncMock()
-        repo_mock.get_session_id_by_contact_hash.return_value = "sess_id"
+        repo_mock.get_session_id_by_contact_hash.return_value = (
+            "11111111-1111-1111-1111-111111111111"
+        )
         repo_mock.get_session_ttl.return_value = settings.VERIFICATION_TTL_SECONDS - 10
 
         service = VerificationService(verification_repo=repo_mock, otp_sender=otp_sender_mock)
@@ -112,7 +149,9 @@ class TestVerificationServiceCreate:
             request_count=1,
             check_attempts=settings.VERIFICATION_MAX_CHECK_ATTEMPTS,
         )
-        repo_mock.get_session_id_by_contact_hash.return_value = "sess_id"
+        repo_mock.get_session_id_by_contact_hash.return_value = (
+            "11111111-1111-1111-1111-111111111111"
+        )
         repo_mock.get_session_ttl.return_value = (
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
         )
@@ -168,13 +207,14 @@ class TestVerificationServiceConfirm:
 
         with (
             patch("app.services.verifications.hash_contact", return_value="hash"),
-            patch("app.services.verifications.secrets.token_urlsafe", return_value="raw_token"),
+            patch("app.services.verifications.secrets.token_urlsafe", return_value="r" * 43),
             patch("app.services.verifications.hash_token", return_value="hashed_token"),
         ):
             result = await service.confirm_verification("sess_id", "123456")
 
-        assert result["verification_token"] == "raw_token"
-        assert result["expires_in"] == settings.VERIFICATION_TOKEN_TTL_SECONDS
+        assert isinstance(result, VerificationConfirmResponse)
+        assert result.verification_token == "r" * 43
+        assert result.expires_in == settings.VERIFICATION_TOKEN_TTL_SECONDS
         repo_mock.delete_session.assert_awaited_once_with("sess_id", "hash")
         repo_mock.save_token.assert_awaited_once()
 

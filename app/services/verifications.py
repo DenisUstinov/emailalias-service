@@ -15,6 +15,7 @@ from app.core.exceptions import (
 from app.core.notifications import OTPSender
 from app.core.security import hash_contact, hash_token
 from app.repositories.verification import VerificationRepository
+from app.schemas.responses import VerificationConfirmResponse, VerificationCreateResponse
 from app.schemas.verification import (
     VerificationActionType,
     VerificationSessionData,
@@ -31,7 +32,7 @@ class VerificationService:
 
     async def create_verification(
         self, contact: str, action_type: VerificationActionType
-    ) -> dict[str, str | int]:
+    ) -> VerificationCreateResponse:
         contact_hash = hash_contact(contact)
         session_id = await self.verification_repo.get_session_id_by_contact_hash(contact_hash)
 
@@ -94,20 +95,37 @@ class VerificationService:
                 session_id, contact_hash, initial_session, settings.VERIFICATION_TTL_SECONDS
             )
 
-        await self.otp_sender.send_otp(contact, otp)
         logger.info(
-            "OTP sent successfully",
+            "Verification session created",
             extra={
                 "contact": contact,
                 "is_resend": bool(existing_session),
                 "verification_id": session_id,
             },
         )
-        return {"verification_id": session_id, "expires_in": settings.VERIFICATION_TTL_SECONDS}
+        return VerificationCreateResponse(
+            verification_id=uuid.UUID(session_id),
+            expires_in=settings.VERIFICATION_TTL_SECONDS,
+        )
+
+    async def send_otp(self, verification_id: str, destination: str) -> None:
+        session = await self.verification_repo.get_session(verification_id)
+        if session is None:
+            logger.warning(
+                "Verification session not found or expired during OTP send",
+                extra={"verification_id": verification_id},
+            )
+            return
+
+        await self.otp_sender.send(destination, session.otp)
+        logger.info(
+            "OTP sent successfully",
+            extra={"contact": destination, "verification_id": verification_id},
+        )
 
     async def confirm_verification(
         self, verification_id: str, otp_code: str
-    ) -> dict[str, str | int]:
+    ) -> VerificationConfirmResponse:
         session = await self.verification_repo.get_session(verification_id)
         if session is None:
             logger.warning(
@@ -160,10 +178,10 @@ class VerificationService:
             "Contact successfully verified and token issued",
             extra={"contact": session.contact, "action_type": session.action_type},
         )
-        return {
-            "verification_token": raw_token,
-            "expires_in": settings.VERIFICATION_TOKEN_TTL_SECONDS,
-        }
+        return VerificationConfirmResponse(
+            verification_token=raw_token,
+            expires_in=settings.VERIFICATION_TOKEN_TTL_SECONDS,
+        )
 
     @staticmethod
     def _generate_otp() -> str:

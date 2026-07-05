@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from app.core.config import settings
 from app.core.dependencies import get_verification_service
 from app.core.rate_limiter import limiter
+from app.infrastructure.celery.tasks import send_otp_task
 from app.schemas.requests import VerificationConfirmRequest, VerificationCreateRequest
 from app.schemas.responses import VerificationConfirmResponse, VerificationCreateResponse
 from app.services.verifications import VerificationService
@@ -35,25 +36,24 @@ async def confirm_verification(
     data: VerificationConfirmRequest,
     service: Annotated[VerificationService, Depends(get_verification_service)],
 ) -> VerificationConfirmResponse:
-    result = await service.confirm_verification(
+    return await service.confirm_verification(
         verification_id=str(verification_id),
         otp_code=data.otp_code,
-    )
-    return VerificationConfirmResponse(
-        verification_token=result["verification_token"],
-        expires_in=result["expires_in"],
     )
 
 
 @router.post(
     "",
     response_model=VerificationCreateResponse,
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_202_ACCEPTED,
     summary="Initiate contact verification",
     description="Send an OTP code to the specified contact (email or phone) to verify ownership \
-    for a specific action.",
+    for a specific action. The OTP delivery is processed asynchronously in the background.",
     responses={
-        200: {"description": "OTP successfully sent"},
+        202: {
+            "description": "Verification request accepted and OTP delivery queued for background \
+            processing"
+        },
         400: {"description": "Cooldown not elapsed or limits exceeded"},
         422: {"description": "Validation error in request data"},
         429: {"description": "Rate limit exceeded"},
@@ -69,7 +69,5 @@ async def create_verification(
         contact=data.email,
         action_type=data.action_type,
     )
-    return VerificationCreateResponse(
-        verification_id=result["verification_id"],
-        expires_in=result["expires_in"],
-    )
+    send_otp_task.apply_async(args=[data.email, str(result.verification_id)])
+    return result
