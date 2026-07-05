@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.notifications import OTPSender, StubOTPSender
 from app.core.security import hash_token
-from app.infrastructure.mail_provider import BegetMailProviderAdapter
+from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
 from app.models.database import AsyncSessionLocal
 from app.models.domain import UserRole
 from app.repositories.aliases import AliasRepository

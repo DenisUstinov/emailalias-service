@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-from typing import Protocol
 
 import httpx
 
@@ -12,11 +11,6 @@ from app.core.exceptions import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-class MailProviderPort(Protocol):
-    def create_mailbox(self, domain: str, mailbox: str, password: str) -> None: ...
-    def configure_forwarding(self, domain: str, mailbox: str, target_email: str) -> None: ...
 
 
 class BegetMailProviderAdapter:

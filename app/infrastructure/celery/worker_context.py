@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
-from app.infrastructure.mail_provider import BegetMailProviderAdapter
+from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
 from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
 from app.repositories.users import UserRepository

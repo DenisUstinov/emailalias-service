@@ -1,0 +1,6 @@
+from typing import Protocol
+
+
+class MailProviderPort(Protocol):
+    def create_mailbox(self, domain: str, mailbox: str, password: str) -> None: ...
+    def configure_forwarding(self, domain: str, mailbox: str, target_email: str) -> None: ...

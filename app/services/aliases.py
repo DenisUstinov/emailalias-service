@@ -13,8 +13,8 @@ from app.core.exceptions import (
     AliasPremiumDomainRequiresSubscriptionError,
     ExternalProviderRejectionError,
 )
+from app.core.mail_provider import MailProviderPort
 from app.core.security import generate_mailbox_password
-from app.infrastructure.mail_provider import MailProviderPort
 from app.models.domain import Alias, AliasStatus
 from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
