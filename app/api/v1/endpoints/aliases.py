@@ -8,8 +8,9 @@ from app.core.config import settings
 from app.core.dependencies import get_alias_service, get_current_user_id
 from app.core.rate_limiter import limiter
 from app.infrastructure.celery.tasks import (
-    configure_forwarding_task,
     create_mailbox_task,
+    enable_forwarding_task,
+    update_settings_task,
 )
 from app.schemas.requests import AliasCreateRequest
 from app.schemas.responses import AliasCreateResponse
@@ -53,7 +54,8 @@ async def create_alias(
     )
     workflow = chain(
         create_mailbox_task.s(str(response.id)),
-        configure_forwarding_task.s(),
+        enable_forwarding_task.s(),
+        update_settings_task.s(),
     )
     workflow.apply_async()
     return response

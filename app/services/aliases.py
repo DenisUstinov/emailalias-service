@@ -113,9 +113,13 @@ class AliasService:
     async def provision_alias(self, alias_id: uuid.UUID) -> None:
         alias = await self.alias_repo.get_by_id(alias_id)
 
-        if alias.status in (AliasStatus.PROVISIONED, AliasStatus.ACTIVE):
+        if alias.status in (
+            AliasStatus.PROVISIONED,
+            AliasStatus.FORWARDED,
+            AliasStatus.ACTIVE,
+        ):
             logger.info(
-                "Alias already provisioned or active, skipping",
+                "Alias already provisioned or beyond, skipping",
                 extra={"alias_id": str(alias_id), "current_status": alias.status.value},
             )
             return
@@ -149,19 +153,19 @@ class AliasService:
         alias.status = AliasStatus.PROVISIONED
         logger.info("Mailbox created, alias provisioned", extra={"alias_id": str(alias_id)})
 
-    async def activate_alias(self, alias_id: uuid.UUID) -> None:
+    async def enable_forwarding(self, alias_id: uuid.UUID) -> None:
         alias = await self.alias_repo.get_by_id(alias_id)
 
-        if alias.status == AliasStatus.ACTIVE:
+        if alias.status in (AliasStatus.FORWARDED, AliasStatus.ACTIVE):
             logger.info(
-                "Alias already active, skipping activation",
-                extra={"alias_id": str(alias_id)},
+                "Forwarding already enabled, skipping",
+                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
             )
             return
 
-        if alias.status in (AliasStatus.PENDING, AliasStatus.FAILED):
+        if alias.status != AliasStatus.PROVISIONED:
             logger.warning(
-                "Alias is not provisioned, cannot activate",
+                "Alias is not provisioned, cannot enable forwarding",
                 extra={"alias_id": str(alias_id), "current_status": alias.status.value},
             )
             return
@@ -171,14 +175,51 @@ class AliasService:
         mailbox_name = f"{alias.local_part}.{alias.random_part}"
 
         try:
-            self.mail_provider.configure_forwarding(
+            self.mail_provider.enable_forwarding(
                 domain=domain.fqdn,
                 mailbox=mailbox_name,
                 target_email=user.email,
             )
         except ExternalProviderRejectionError as e:
             logger.error(
-                "Forwarding configuration rejected by provider: %s",
+                "Forwarding enabling rejected by provider: %s",
+                e.detail,
+                extra={"alias_id": str(alias_id)},
+            )
+            alias.status = AliasStatus.FAILED
+            return
+
+        alias.status = AliasStatus.FORWARDED
+        logger.info("Forwarding enabled", extra={"alias_id": str(alias_id)})
+
+    async def update_settings(self, alias_id: uuid.UUID) -> None:
+        alias = await self.alias_repo.get_by_id(alias_id)
+
+        if alias.status == AliasStatus.ACTIVE:
+            logger.info(
+                "Alias already active, skipping settings update",
+                extra={"alias_id": str(alias_id)},
+            )
+            return
+
+        if alias.status != AliasStatus.FORWARDED:
+            logger.warning(
+                "Forwarding not enabled, cannot update settings",
+                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
+            )
+            return
+
+        domain = await self.domain_repo.get_by_id(alias.domain_id)
+        mailbox_name = f"{alias.local_part}.{alias.random_part}"
+
+        try:
+            self.mail_provider.update_settings(
+                domain=domain.fqdn,
+                mailbox=mailbox_name,
+            )
+        except ExternalProviderRejectionError as e:
+            logger.error(
+                "Settings update rejected by provider: %s",
                 e.detail,
                 extra={"alias_id": str(alias_id)},
             )
@@ -186,4 +227,4 @@ class AliasService:
             return
 
         alias.status = AliasStatus.ACTIVE
-        logger.info("Forwarding configured, alias activated", extra={"alias_id": str(alias_id)})
+        logger.info("Mailbox settings updated, alias activated", extra={"alias_id": str(alias_id)})

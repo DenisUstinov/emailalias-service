@@ -134,7 +134,7 @@ class TestBegetMailProviderAdapter:
         assert exc_info.value.detail == "Provider connection error"
 
     @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_configure_forwarding_success(self, mock_client_cls: MagicMock) -> None:
+    def test_enable_forwarding_success(self, mock_client_cls: MagicMock) -> None:
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
@@ -144,47 +144,19 @@ class TestBegetMailProviderAdapter:
         mock_client.get.return_value = mock_response
 
         adapter = BegetMailProviderAdapter()
-        adapter.configure_forwarding("example.com", "test.user", "forward@example.com")
+        adapter.enable_forwarding("example.com", "test.user", "forward@example.com")
 
-        assert mock_client.get.call_count == 2
-        first_call = mock_client.get.call_args_list[0]
-        second_call = mock_client.get.call_args_list[1]
-        assert first_call[0][0] == "/forwardListAddMailbox"
-        assert second_call[0][0] == "/changeMailboxSettings"
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_configure_forwarding_payload_correctness(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-        adapter.configure_forwarding("example.com", "test.user", "forward@example.com")
-
-        first_call = mock_client.get.call_args_list[0]
-        first_payload = json.loads(first_call[1]["params"]["input_data"])
-        assert first_payload == {
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[0][0] == "/forwardListAddMailbox"
+        assert json.loads(call_args[1]["params"]["input_data"]) == {
             "domain": "example.com",
             "mailbox": "test.user",
             "forward_mailbox": "forward@example.com",
         }
 
-        second_call = mock_client.get.call_args_list[1]
-        second_payload = json.loads(second_call[1]["params"]["input_data"])
-        assert second_payload == {
-            "domain": "example.com",
-            "mailbox": "test.user",
-            "spam_filter_status": 0,
-            "spam_filter": 20,
-            "forward_mail_status": "forward_and_delete",
-        }
-
     @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_configure_forwarding_first_request_fails(self, mock_client_cls: MagicMock) -> None:
+    def test_enable_forwarding_failure(self, mock_client_cls: MagicMock) -> None:
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
@@ -196,36 +168,53 @@ class TestBegetMailProviderAdapter:
         adapter = BegetMailProviderAdapter()
 
         with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.configure_forwarding("example.com", "test.user", "forward@example.com")
+            adapter.enable_forwarding("example.com", "test.user", "forward@example.com")
 
         assert exc_info.value.detail == "Mailbox not found"
-        assert mock_client.get.call_count == 1
 
     @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_configure_forwarding_second_request_fails(self, mock_client_cls: MagicMock) -> None:
+    def test_update_settings_success(self, mock_client_cls: MagicMock) -> None:
         mock_client = MagicMock()
         mock_client_cls.return_value = mock_client
 
-        success_response = MagicMock()
-        success_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
-        success_response.raise_for_status.return_value = None
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
+        mock_response.raise_for_status.return_value = None
+        mock_client.get.return_value = mock_response
 
-        error_response = MagicMock()
-        error_response.json.return_value = {
+        adapter = BegetMailProviderAdapter()
+        adapter.update_settings("example.com", "test.user")
+
+        mock_client.get.assert_called_once()
+        call_args = mock_client.get.call_args
+        assert call_args[0][0] == "/changeMailboxSettings"
+        assert json.loads(call_args[1]["params"]["input_data"]) == {
+            "domain": "example.com",
+            "mailbox": "test.user",
+            "spam_filter_status": 0,
+            "spam_filter": 20,
+            "forward_mail_status": "forward_and_delete",
+        }
+
+    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
+    def test_update_settings_failure(self, mock_client_cls: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client_cls.return_value = mock_client
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
             "status": "error",
             "error_text": "Settings update failed",
         }
-        error_response.raise_for_status.return_value = None
-
-        mock_client.get.side_effect = [success_response, error_response]
+        mock_response.raise_for_status.return_value = None
+        mock_client.get.return_value = mock_response
 
         adapter = BegetMailProviderAdapter()
 
         with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.configure_forwarding("example.com", "test.user", "forward@example.com")
+            adapter.update_settings("example.com", "test.user")
 
         assert exc_info.value.detail == "Settings update failed"
-        assert mock_client.get.call_count == 2
 
     @patch("app.infrastructure.beget_mail_provider.httpx.Client")
     def test_non_json_non_true_response_raises_rejection(self, mock_client_cls: MagicMock) -> None:

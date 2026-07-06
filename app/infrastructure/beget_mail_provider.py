@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 
 import httpx
 
@@ -23,7 +22,6 @@ class BegetMailProviderAdapter:
         self._password = settings.BEGET_PASSWORD.get_secret_value()
 
     def _make_request(self, method: str, input_data: dict) -> None:
-        time.sleep(0.9)
         params = {
             "login": self._login,
             "passwd": self._password,
@@ -82,11 +80,13 @@ class BegetMailProviderAdapter:
             {"domain": domain, "mailbox": mailbox, "mailbox_password": password},
         )
 
-    def configure_forwarding(self, domain: str, mailbox: str, target_email: str) -> None:
+    def enable_forwarding(self, domain: str, mailbox: str, target_email: str) -> None:
         self._make_request(
             "forwardListAddMailbox",
             {"domain": domain, "mailbox": mailbox, "forward_mailbox": target_email},
         )
+
+    def update_settings(self, domain: str, mailbox: str) -> None:
         self._make_request(
             "changeMailboxSettings",
             {

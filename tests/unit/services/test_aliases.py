@@ -360,8 +360,8 @@ class TestAliasServiceProvisionAlias:
 
 
 @pytest.mark.anyio
-class TestAliasServiceActivateAlias:
-    async def test_success_activates_provisioned_alias(
+class TestAliasServiceEnableForwarding:
+    async def test_success_enables_forwarding(
         self,
         test_uuids: dict[str, UUID],
         make_alias: Callable[..., Alias],
@@ -396,16 +396,16 @@ class TestAliasServiceActivateAlias:
             mail_provider=mail_provider,
         )
 
-        await service.activate_alias(alias_id)
+        await service.enable_forwarding(alias_id)
 
-        assert alias.status == AliasStatus.ACTIVE
-        mail_provider.configure_forwarding.assert_called_once_with(
+        assert alias.status == AliasStatus.FORWARDED
+        mail_provider.enable_forwarding.assert_called_once_with(
             domain="example.com",
             mailbox="test.abc123",
             target_email="user@example.com",
         )
 
-    async def test_skips_already_active_alias(
+    async def test_skips_already_forwarded(
         self,
         test_uuids: dict[str, UUID],
         make_alias: Callable[..., Alias],
@@ -415,7 +415,7 @@ class TestAliasServiceActivateAlias:
             alias_id=alias_id,
             user_id=test_uuids["user_1"],
             domain_id=test_uuids["user_2"],
-            status=AliasStatus.ACTIVE,
+            status=AliasStatus.FORWARDED,
         )
 
         alias_repo = AsyncMock()
@@ -424,10 +424,10 @@ class TestAliasServiceActivateAlias:
 
         service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
 
-        await service.activate_alias(alias_id)
+        await service.enable_forwarding(alias_id)
 
-        mail_provider.configure_forwarding.assert_not_called()
-        assert alias.status == AliasStatus.ACTIVE
+        mail_provider.enable_forwarding.assert_not_called()
+        assert alias.status == AliasStatus.FORWARDED
 
     async def test_skips_pending_alias(
         self,
@@ -448,9 +448,9 @@ class TestAliasServiceActivateAlias:
 
         service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
 
-        await service.activate_alias(alias_id)
+        await service.enable_forwarding(alias_id)
 
-        mail_provider.configure_forwarding.assert_not_called()
+        mail_provider.enable_forwarding.assert_not_called()
         assert alias.status == AliasStatus.PENDING
 
     async def test_skips_failed_alias(
@@ -472,9 +472,9 @@ class TestAliasServiceActivateAlias:
 
         service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
 
-        await service.activate_alias(alias_id)
+        await service.enable_forwarding(alias_id)
 
-        mail_provider.configure_forwarding.assert_not_called()
+        mail_provider.enable_forwarding.assert_not_called()
         assert alias.status == AliasStatus.FAILED
 
     async def test_sets_failed_status_on_provider_rejection(
@@ -504,7 +504,7 @@ class TestAliasServiceActivateAlias:
         user_repo = AsyncMock()
         user_repo.get_by_id.return_value = user
         mail_provider = MagicMock()
-        mail_provider.configure_forwarding.side_effect = ExternalProviderRejectionError(
+        mail_provider.enable_forwarding.side_effect = ExternalProviderRejectionError(
             detail="rejected"
         )
 
@@ -515,6 +515,152 @@ class TestAliasServiceActivateAlias:
             mail_provider=mail_provider,
         )
 
-        await service.activate_alias(alias_id)
+        await service.enable_forwarding(alias_id)
+
+        assert alias.status == AliasStatus.FAILED
+
+
+@pytest.mark.anyio
+class TestAliasServiceUpdateSettings:
+    async def test_success_updates_settings(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+        make_domain: Callable[..., Domain],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        domain_id = uuid.uuid4()
+        alias = make_alias(
+            alias_id=alias_id,
+            user_id=test_uuids["user_2"],
+            domain_id=domain_id,
+            status=AliasStatus.FORWARDED,
+        )
+        domain = make_domain(domain_id=domain_id, fqdn="example.com")
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        domain_repo = AsyncMock()
+        domain_repo.get_by_id.return_value = domain
+        mail_provider = MagicMock()
+
+        service = _make_service(
+            alias_repo=alias_repo,
+            domain_repo=domain_repo,
+            mail_provider=mail_provider,
+        )
+
+        await service.update_settings(alias_id)
+
+        assert alias.status == AliasStatus.ACTIVE
+        mail_provider.update_settings.assert_called_once_with(
+            domain="example.com",
+            mailbox="test.abc123",
+        )
+
+    async def test_skips_already_active(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(
+            alias_id=alias_id,
+            user_id=test_uuids["user_1"],
+            domain_id=test_uuids["user_2"],
+            status=AliasStatus.ACTIVE,
+        )
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = MagicMock()
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+
+        await service.update_settings(alias_id)
+
+        mail_provider.update_settings.assert_not_called()
+        assert alias.status == AliasStatus.ACTIVE
+
+    async def test_skips_provisioned_alias(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(
+            alias_id=alias_id,
+            user_id=test_uuids["user_1"],
+            domain_id=test_uuids["user_2"],
+            status=AliasStatus.PROVISIONED,
+        )
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = MagicMock()
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+
+        await service.update_settings(alias_id)
+
+        mail_provider.update_settings.assert_not_called()
+        assert alias.status == AliasStatus.PROVISIONED
+
+    async def test_skips_failed_alias(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(
+            alias_id=alias_id,
+            user_id=test_uuids["user_1"],
+            domain_id=test_uuids["user_2"],
+            status=AliasStatus.FAILED,
+        )
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = MagicMock()
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+
+        await service.update_settings(alias_id)
+
+        mail_provider.update_settings.assert_not_called()
+        assert alias.status == AliasStatus.FAILED
+
+    async def test_sets_failed_status_on_provider_rejection(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+        make_domain: Callable[..., Domain],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        domain_id = uuid.uuid4()
+        alias = make_alias(
+            alias_id=alias_id,
+            user_id=test_uuids["user_2"],
+            domain_id=domain_id,
+            status=AliasStatus.FORWARDED,
+        )
+        domain = make_domain(domain_id=domain_id, fqdn="example.com")
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        domain_repo = AsyncMock()
+        domain_repo.get_by_id.return_value = domain
+        mail_provider = MagicMock()
+        mail_provider.update_settings.side_effect = ExternalProviderRejectionError(
+            detail="rejected"
+        )
+
+        service = _make_service(
+            alias_repo=alias_repo,
+            domain_repo=domain_repo,
+            mail_provider=mail_provider,
+        )
+
+        await service.update_settings(alias_id)
 
         assert alias.status == AliasStatus.FAILED
