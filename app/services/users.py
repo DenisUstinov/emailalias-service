@@ -13,6 +13,7 @@ from app.core.exceptions import (
 )
 from app.core.security import hash_password, verify_password
 from app.models.domain import User, UserRole
+from app.repositories.aliases import AliasRepository
 from app.repositories.users import UserRepository
 from app.schemas.requests import UserCreateRequest
 from app.schemas.responses import UserAdminUpdateResponse, UserCreateResponse, UserUpdateResponse
@@ -29,10 +30,12 @@ class UserService:
         user_repo: UserRepository,
         verification_service: VerificationService,
         token_service: TokenService,
+        alias_repo: AliasRepository,
     ) -> None:
         self.user_repo = user_repo
         self.verification_service = verification_service
         self.token_service = token_service
+        self.alias_repo = alias_repo
 
     async def _get_active_user(self, user_id: uuid.UUID) -> User | None:
         user = await self.user_repo.get_by_id_for_update(user_id)
@@ -166,12 +169,13 @@ class UserService:
         else:
             new_password_hash = None
 
-        if email is not None:
+        if email is not None and email != user.email:
             await self.verification_service.verify_operation_token(
                 token=verification_token,
                 contact=email,
                 expected_action=VerificationActionType.EMAIL_CHANGE,
             )
+            await self.alias_repo.reset_active_to_forwarded_for_user(user_id)
 
         try:
             updated = await self.user_repo.update(

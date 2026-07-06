@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.models.domain import Alias, AliasStatus
 
@@ -34,3 +34,38 @@ class AliasRepository:
         alias = await self.get_by_id(alias_id)
         alias.status = status
         await self.session.flush()
+
+    async def reset_active_to_forwarded_for_user(self, user_id: uuid.UUID) -> None:
+        stmt = (
+            update(Alias)
+            .where(
+                Alias.user_id == user_id,
+                Alias.status == AliasStatus.ACTIVE,
+            )
+            .values(status=AliasStatus.FORWARDED, updated_at=func.now())
+        )
+        await self.session.execute(stmt)
+        await self.session.flush()
+
+    async def get_forwarded_alias_ids_by_user(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        stmt = select(Alias.id).where(
+            Alias.user_id == user_id,
+            Alias.status == AliasStatus.FORWARDED,
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def try_update_status(
+        self, alias_id: uuid.UUID, expected_status: AliasStatus, new_status: AliasStatus
+    ) -> bool:
+        stmt = (
+            update(Alias)
+            .where(
+                Alias.id == alias_id,
+                Alias.status == expected_status,
+            )
+            .values(status=new_status, updated_at=func.now())
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount > 0

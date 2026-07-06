@@ -1,3 +1,6 @@
+import uuid
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -27,7 +30,20 @@ class TestUpdateUserMe:
         redis_client,
         valid_test_password,
         generate_test_email,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import users as users_endpoint
+        from app.services import aliases as aliases_service_module
+
+        mock_workflow = MagicMock()
+        mock_group = MagicMock(return_value=mock_workflow)
+        monkeypatch.setattr(users_endpoint, "group", mock_group)
+        monkeypatch.setattr(
+            aliases_service_module.AliasService,
+            "get_forwarded_alias_ids",
+            AsyncMock(return_value=[uuid.uuid4()]),
+        )
+
         user = await create_test_user(password=valid_test_password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {active_token}"}
@@ -62,6 +78,9 @@ class TestUpdateUserMe:
         verification_exists = await redis_client.exists(token_key)
         assert verification_exists == 0
 
+        mock_group.assert_called_once()
+        mock_workflow.apply_async.assert_called_once()
+
     async def test_success_update_password(
         self,
         http_client: AsyncClient,
@@ -71,7 +90,13 @@ class TestUpdateUserMe:
         redis_client,
         valid_test_password,
         new_valid_test_password,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import users as users_endpoint
+
+        mock_group = MagicMock()
+        monkeypatch.setattr(users_endpoint, "group", mock_group)
+
         password = valid_test_password
         user = await create_test_user(password=password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
@@ -98,6 +123,8 @@ class TestUpdateUserMe:
         revoked = await redis_client.get(f"tkn:{hashed}")
         assert revoked is None
 
+        mock_group.assert_not_called()
+
     async def test_success_update_both_email_and_password(
         self,
         http_client: AsyncClient,
@@ -109,7 +136,20 @@ class TestUpdateUserMe:
         valid_test_password,
         new_valid_test_password,
         generate_test_email,
+        monkeypatch,
     ) -> None:
+        from app.api.v1.endpoints import users as users_endpoint
+        from app.services import aliases as aliases_service_module
+
+        mock_workflow = MagicMock()
+        mock_group = MagicMock(return_value=mock_workflow)
+        monkeypatch.setattr(users_endpoint, "group", mock_group)
+        monkeypatch.setattr(
+            aliases_service_module.AliasService,
+            "get_forwarded_alias_ids",
+            AsyncMock(return_value=[uuid.uuid4()]),
+        )
+
         password = valid_test_password
         user = await create_test_user(password=password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
@@ -151,6 +191,9 @@ class TestUpdateUserMe:
 
         verification_exists = await redis_client.exists(token_key)
         assert verification_exists == 0
+
+        mock_group.assert_called_once()
+        mock_workflow.apply_async.assert_called_once()
 
     async def test_business_error_user_not_found(
         self,

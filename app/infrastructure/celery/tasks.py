@@ -15,6 +15,7 @@ __all__ = [
     "create_mailbox_task",
     "enable_forwarding_task",
     "update_settings_task",
+    "update_alias_forwarding_task",
     "send_otp_task",
 ]
 
@@ -71,6 +72,25 @@ def update_settings_task(self, alias_id: str) -> str:
     async def run() -> None:
         async with alias_service_context() as service:
             await service.update_settings(alias_uuid)
+
+    asyncio.run(run())
+    return alias_id
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ExternalProviderUnavailableError,),
+    retry_backoff=True,
+    max_retries=5,
+    rate_limit="1/s",
+)
+def update_alias_forwarding_task(self, alias_id: str) -> str:
+    alias_uuid = uuid.UUID(alias_id)
+    logger.info("Starting alias forwarding update task", extra={"alias_id": alias_id})
+
+    async def run() -> None:
+        async with alias_service_context() as service:
+            await service.update_forwarding_email(alias_uuid)
 
     asyncio.run(run())
     return alias_id

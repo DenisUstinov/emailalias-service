@@ -228,3 +228,55 @@ class AliasService:
 
         alias.status = AliasStatus.ACTIVE
         logger.info("Mailbox settings updated, alias activated", extra={"alias_id": str(alias_id)})
+
+    async def update_forwarding_email(self, alias_id: uuid.UUID) -> None:
+        alias = await self.alias_repo.get_by_id(alias_id)
+
+        if alias.status != AliasStatus.FORWARDED:
+            logger.info(
+                "Alias is not in FORWARDED state, skipping forwarding update",
+                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
+            )
+            return
+
+        domain = await self.domain_repo.get_by_id(alias.domain_id)
+        user = await self.user_repo.get_by_id(alias.user_id)
+        mailbox_name = f"{alias.local_part}.{alias.random_part}"
+
+        try:
+            self.mail_provider.enable_forwarding(
+                domain=domain.fqdn,
+                mailbox=mailbox_name,
+                target_email=user.email,
+            )
+        except ExternalProviderRejectionError as e:
+            logger.error(
+                "Forwarding update rejected by provider: %s",
+                e.detail,
+                extra={"alias_id": str(alias_id)},
+            )
+            updated = await self.alias_repo.try_update_status(
+                alias_id, AliasStatus.FORWARDED, AliasStatus.FAILED
+            )
+            if not updated:
+                logger.warning(
+                    "Alias status changed during execution, skipping FAILED update",
+                    extra={"alias_id": str(alias_id)},
+                )
+            return
+
+        updated = await self.alias_repo.try_update_status(
+            alias_id, AliasStatus.FORWARDED, AliasStatus.ACTIVE
+        )
+        if updated:
+            logger.info(
+                "Forwarding email updated, alias activated", extra={"alias_id": str(alias_id)}
+            )
+        else:
+            logger.warning(
+                "Alias status changed during execution, skipping ACTIVE update",
+                extra={"alias_id": str(alias_id)},
+            )
+
+    async def get_forwarded_alias_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        return await self.alias_repo.get_forwarded_alias_ids_by_user(user_id)

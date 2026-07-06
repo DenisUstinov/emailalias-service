@@ -1,11 +1,18 @@
 import uuid
 from typing import Annotated
 
+from celery import group
 from fastapi import APIRouter, Depends, Request, status
 
 from app.core.config import settings
-from app.core.dependencies import get_current_admin_user_id, get_current_user_id, get_user_service
+from app.core.dependencies import (
+    get_alias_service,
+    get_current_admin_user_id,
+    get_current_user_id,
+    get_user_service,
+)
 from app.core.rate_limiter import limiter
+from app.infrastructure.celery.tasks import update_alias_forwarding_task
 from app.schemas.requests import (
     UserAdminUpdateRequest,
     UserCreateRequest,
@@ -13,6 +20,7 @@ from app.schemas.requests import (
     UserUpdateRequest,
 )
 from app.schemas.responses import UserAdminUpdateResponse, UserCreateResponse, UserUpdateResponse
+from app.services.aliases import AliasService
 from app.services.users import UserService
 
 router = APIRouter()
@@ -64,14 +72,25 @@ async def update_user_me(
     data: UserUpdateRequest,
     user_id: Annotated[uuid.UUID, Depends(get_current_user_id)],
     service: Annotated[UserService, Depends(get_user_service)],
+    alias_service: Annotated[AliasService, Depends(get_alias_service)],
 ) -> UserUpdateResponse:
-    return await service.update_user(
+    response = await service.update_user(
         user_id=user_id,
         email=data.email,
         new_password=data.new_password,
         current_password=data.current_password,
         verification_token=data.verification_token,
     )
+
+    if data.email is not None:
+        alias_ids = await alias_service.get_forwarded_alias_ids(user_id)
+        if alias_ids:
+            workflow = group(
+                update_alias_forwarding_task.s(str(alias_id)) for alias_id in alias_ids
+            )
+            workflow.apply_async()
+
+    return response
 
 
 @router.patch(

@@ -34,6 +34,7 @@ class TestUserServiceCreateUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         created_user = make_user(
             user_id=test_uuids["user_1"],
@@ -47,6 +48,7 @@ class TestUserServiceCreateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         request = UserCreateRequest(
@@ -72,6 +74,7 @@ class TestUserServiceCreateUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
         existing_user.deleted_at = datetime(2023, 1, 1, tzinfo=UTC)
@@ -83,6 +86,7 @@ class TestUserServiceCreateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         request = UserCreateRequest(
@@ -109,6 +113,7 @@ class TestUserServiceCreateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         request = UserCreateRequest(
@@ -139,6 +144,7 @@ class TestUserServiceCreateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         request = UserCreateRequest(
@@ -169,6 +175,7 @@ class TestUserServiceCreateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         request = UserCreateRequest(
@@ -193,6 +200,7 @@ class TestUserServiceDeleteUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
         existing_user.is_banned = False
@@ -202,6 +210,7 @@ class TestUserServiceDeleteUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
@@ -224,6 +233,7 @@ class TestUserServiceDeleteUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         result = await service.delete_user(
@@ -250,6 +260,7 @@ class TestUserServiceDeleteUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(UserBannedError) as exc_info:
@@ -278,6 +289,7 @@ class TestUserServiceDeleteUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(ContactNotVerifiedError) as exc_info:
@@ -305,6 +317,7 @@ class TestUserServiceDeleteUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         await service.delete_user(user_id=existing_user.id, verification_token="a" * 43)
@@ -325,6 +338,7 @@ class TestUserServiceUpdateUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         existing_user = make_user(user_id=test_uuids["user_1"], email="old@example.com")
         user_repo_mock.get_by_id_for_update.return_value = existing_user
@@ -336,6 +350,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         result = await service.update_user(
@@ -348,6 +363,9 @@ class TestUserServiceUpdateUser:
         assert result.email == test_email_alt
         verification_service_mock.verify_operation_token.assert_awaited_once()
         token_service_mock.revoke_active_tokens.assert_awaited_once()
+        alias_repo_mock.reset_active_to_forwarded_for_user.assert_awaited_once_with(
+            existing_user.id
+        )
 
     async def test_success_update_password(
         self,
@@ -359,6 +377,7 @@ class TestUserServiceUpdateUser:
     ) -> None:
         user_repo_mock = mock_async_repository
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         existing_user = make_user(user_id=test_uuids["user_1"], password_hash="$argon2id$old")
         user_repo_mock.get_by_id_for_update.return_value = existing_user
@@ -370,6 +389,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         with (
@@ -384,6 +404,7 @@ class TestUserServiceUpdateUser:
 
         assert isinstance(result, UserUpdateResponse)
         token_service_mock.revoke_active_tokens.assert_awaited_once()
+        alias_repo_mock.reset_active_to_forwarded_for_user.assert_not_awaited()
 
     async def test_success_update_both_email_and_password(
         self,
@@ -397,6 +418,7 @@ class TestUserServiceUpdateUser:
         user_repo_mock = mock_async_repository
         verification_service_mock = AsyncMock()
         token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
 
         existing_user = make_user(
             user_id=test_uuids["user_1"], email="old@example.com", password_hash="$argon2id$old"
@@ -412,6 +434,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
         )
 
         with (
@@ -430,6 +453,9 @@ class TestUserServiceUpdateUser:
         assert result.email == test_email_alt
         verification_service_mock.verify_operation_token.assert_awaited_once()
         token_service_mock.revoke_active_tokens.assert_awaited_once()
+        alias_repo_mock.reset_active_to_forwarded_for_user.assert_awaited_once_with(
+            existing_user.id
+        )
 
     async def test_raises_when_password_change_without_current_password(
         self,
@@ -446,6 +472,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(CurrentPasswordRequiredError) as exc_info:
@@ -472,6 +499,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -500,6 +528,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         with (
@@ -533,6 +562,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(ContactNotVerifiedError) as exc_info:
@@ -565,6 +595,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(EmailAlreadyExistsError) as exc_info:
@@ -597,6 +628,7 @@ class TestUserServiceUpdateUser:
             user_repo=user_repo_mock,
             verification_service=verification_service_mock,
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         with patch("app.services.users.hash_password") as mock_hash:
@@ -623,6 +655,65 @@ class TestUserServiceUpdateUser:
             assert call_args[0].__name__ == "hash_password"
             assert call_args[1] == "NewP@ss123!"
 
+    async def test_skips_alias_reset_when_email_is_same(
+        self,
+        make_user: Callable[..., User],
+        test_email: str,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        user_repo_mock = mock_async_repository
+        verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
+
+        existing_user = make_user(user_id=test_uuids["user_1"], email=test_email)
+        user_repo_mock.get_by_id_for_update.return_value = existing_user
+        user_repo_mock.update.return_value = existing_user
+
+        service = UserService(
+            user_repo=user_repo_mock,
+            verification_service=verification_service_mock,
+            token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
+        )
+
+        await service.update_user(
+            user_id=existing_user.id,
+            email=test_email,
+            verification_token="a" * 43,
+        )
+
+        alias_repo_mock.reset_active_to_forwarded_for_user.assert_not_awaited()
+
+    async def test_skips_alias_reset_when_email_is_none(
+        self,
+        make_user: Callable[..., User],
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        user_repo_mock = mock_async_repository
+        verification_service_mock = AsyncMock()
+        token_service_mock = AsyncMock()
+        alias_repo_mock = AsyncMock()
+
+        existing_user = make_user(user_id=test_uuids["user_1"])
+        user_repo_mock.get_by_id_for_update.return_value = existing_user
+        user_repo_mock.update.return_value = existing_user
+
+        service = UserService(
+            user_repo=user_repo_mock,
+            verification_service=verification_service_mock,
+            token_service=token_service_mock,
+            alias_repo=alias_repo_mock,
+        )
+
+        await service.update_user(
+            user_id=existing_user.id,
+        )
+
+        alias_repo_mock.reset_active_to_forwarded_for_user.assert_not_awaited()
+
 
 @pytest.mark.anyio
 class TestUserServiceUpdateUserAdmin:
@@ -646,6 +737,7 @@ class TestUserServiceUpdateUserAdmin:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         result = await service.update_user_admin(
@@ -681,6 +773,7 @@ class TestUserServiceUpdateUserAdmin:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=token_service_mock,
+            alias_repo=AsyncMock(),
         )
 
         result = await service.update_user_admin(
@@ -703,6 +796,7 @@ class TestUserServiceUpdateUserAdmin:
             user_repo=user_repo_mock,
             verification_service=AsyncMock(),
             token_service=AsyncMock(),
+            alias_repo=AsyncMock(),
         )
 
         with pytest.raises(UserNotFoundError) as exc_info:
