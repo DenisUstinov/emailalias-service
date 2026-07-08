@@ -61,6 +61,7 @@ def update_alias_forwarding_task(self, alias_id: str) -> str:
     autoretry_for=(ExternalProviderUnavailableError,),
     retry_backoff=True,
     max_retries=3,
+    priority=9,
 )
 def send_otp_task(self, destination: str, verification_id: str) -> None:
     logger.info(
