@@ -36,7 +36,7 @@ class TokenService:
             )
             raise InvalidCredentialsError()
 
-        if not verify_password(password, user.password_hash):
+        if not verify_password(user.password_hash, password):
             logger.warning(
                 "Failed login attempt: invalid password",
                 extra={"email": email, "user_id": user.id},

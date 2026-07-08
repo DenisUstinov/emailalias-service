@@ -112,8 +112,8 @@ class TestUpdateUserMe:
 
         result = await db_session.execute(select(User).where(User.id == user.id))
         updated_user = result.scalar_one()
-        assert verify_password(new_password, updated_user.password_hash)
-        assert not verify_password(password, updated_user.password_hash)
+        assert verify_password(updated_user.password_hash, new_password)
+        assert not verify_password(updated_user.password_hash, password)
         assert updated_user.updated_at is not None
 
         hashed = hash_token(active_token)
@@ -175,8 +175,8 @@ class TestUpdateUserMe:
         result = await db_session.execute(select(User).where(User.id == user.id))
         updated_user = result.scalar_one()
         assert updated_user.email == new_email
-        assert verify_password(new_password, updated_user.password_hash)
-        assert not verify_password(password, updated_user.password_hash)
+        assert verify_password(updated_user.password_hash, new_password)
+        assert not verify_password(updated_user.password_hash, password)
         assert updated_user.updated_at is not None
 
         hashed = hash_token(active_token)

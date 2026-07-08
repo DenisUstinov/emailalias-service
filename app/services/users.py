@@ -155,7 +155,7 @@ class UserService:
                 )
                 raise CurrentPasswordRequiredError()
 
-            if not verify_password(current_password, user.password_hash):
+            if not verify_password(user.password_hash, current_password):
                 logger.warning(
                     "Invalid current password provided",
                     extra={"user_id": user_id},

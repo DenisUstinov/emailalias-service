@@ -272,8 +272,8 @@ class TestCreateUser:
         assert reactivated_user is not None
         assert reactivated_user.id == user.id
         assert reactivated_user.deleted_at is None
-        assert verify_password(new_password, reactivated_user.password_hash)
-        assert not verify_password(old_password, reactivated_user.password_hash)
+        assert verify_password(reactivated_user.password_hash, new_password)
+        assert not verify_password(reactivated_user.password_hash, old_password)
 
         token_exists = await redis_client.exists(token_key)
         assert token_exists == 0

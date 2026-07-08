@@ -48,8 +48,8 @@ class TestUpdatePassword:
 
         result = await db_session.execute(select(User).where(User.email == email))
         updated_user = result.scalar_one()
-        assert verify_password(new_valid_test_password, updated_user.password_hash)
-        assert not verify_password(valid_test_password, updated_user.password_hash)
+        assert verify_password(updated_user.password_hash, new_valid_test_password)
+        assert not verify_password(updated_user.password_hash, valid_test_password)
 
         token_exists = await redis_client.exists(token_key)
         assert token_exists == 0
