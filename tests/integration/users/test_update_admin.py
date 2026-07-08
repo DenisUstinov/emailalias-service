@@ -74,6 +74,28 @@ class TestUpdateUserAdmin:
         assert isinstance(data["instance"], str)
         assert isinstance(data["field_errors"], list)
 
+    async def test_auth_error_unauthorized(
+        self,
+        http_client: AsyncClient,
+        create_test_user,
+        generate_test_email,
+        valid_test_password,
+    ) -> None:
+        target_email = generate_test_email(prefix="admin")
+        target_user = await create_test_user(email=target_email, password=valid_test_password)
+
+        payload = {"is_banned": True}
+        response = await http_client.patch(f"/api/v1/users/{target_user.id}", json=payload)
+
+        assert response.status_code == 401
+        data = response.json()
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 401
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+
     async def test_auth_error_non_admin(
         self,
         http_client: AsyncClient,

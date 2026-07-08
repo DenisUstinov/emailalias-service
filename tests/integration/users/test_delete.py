@@ -60,6 +60,39 @@ class TestDeleteUserMe:
         after_verification = await redis_client.get(token_key)
         assert after_verification is None
 
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {},
+            {"verification_token": "short"},
+            {"verification_token": "a" * 44},
+            {"verification_token": 123},
+        ],
+    )
+    async def test_validation_errors_invalid_payload(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        payload: dict,
+    ) -> None:
+        headers = await authenticated_headers()
+        response = await http_client.request(
+            "DELETE",
+            "/api/v1/users/me",
+            json=payload,
+            headers=headers,
+        )
+
+        assert response.status_code == 422
+        data = response.json()
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["status"], int)
+        assert data["status"] == 422
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)
+        assert isinstance(data["field_errors"], list)
+
     async def test_business_error_contact_not_verified(
         self,
         http_client: AsyncClient,
