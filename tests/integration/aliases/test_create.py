@@ -7,6 +7,7 @@ from freezegun import freeze_time
 from httpx import AsyncClient
 from sqlalchemy import insert, select
 
+from app.api.v1.endpoints import aliases
 from app.core.config import settings
 from app.core.exceptions import (
     AliasCollisionError,
@@ -16,11 +17,12 @@ from app.core.exceptions import (
 )
 from app.models.domain import Alias, AliasStatus, UserRole
 from app.schemas.responses import AliasCreateResponse
+from app.services import aliases as aliases_service_module
 
 
 @pytest.mark.anyio
 class TestCreateAlias:
-    async def test_success_creates_alias_and_queues_tasks(
+    async def test_success_creates_alias_and_queues_task(
         self,
         http_client: AsyncClient,
         db_session,
@@ -28,11 +30,8 @@ class TestCreateAlias:
         authenticated_headers,
         monkeypatch,
     ) -> None:
-        from app.api.v1.endpoints import aliases
-
-        mock_workflow = MagicMock()
-        mock_chain = MagicMock(return_value=mock_workflow)
-        monkeypatch.setattr(aliases, "chain", mock_chain)
+        mock_task = MagicMock()
+        monkeypatch.setattr(aliases, "provision_alias_task", mock_task)
 
         domain = await create_test_domain(fqdn="success-test.com", is_default=True)
         headers = await authenticated_headers()
@@ -48,8 +47,9 @@ class TestCreateAlias:
         assert data.email.startswith("newsletter.")
         assert data.created_at is not None
 
-        mock_chain.assert_called_once()
-        mock_workflow.apply_async.assert_called_once()
+        mock_task.apply_async.assert_called_once()
+        call_args = mock_task.apply_async.call_args
+        assert call_args[1]["args"][0] == str(data.id)
 
         result = await db_session.execute(select(Alias).where(Alias.id == data.id))
         created_alias = result.scalar_one_or_none()
@@ -66,8 +66,6 @@ class TestCreateAlias:
         authenticated_headers,
         monkeypatch,
     ) -> None:
-        from app.services import aliases as aliases_service_module
-
         domain = await create_test_domain(fqdn="collision-test.com", is_default=True)
         user = await create_test_user(password="TestP@ss123!")
         headers = await authenticated_headers()
@@ -93,6 +91,7 @@ class TestCreateAlias:
 
         assert response.status_code == 409
         data = response.json()
+        assert isinstance(data["status"], int)
         assert data["status"] == 409
         assert isinstance(data["detail"], str)
         assert data["detail"] == AliasCollisionError().detail
@@ -156,6 +155,7 @@ class TestCreateAlias:
 
         assert response.status_code == 404
         data = response.json()
+        assert isinstance(data["status"], int)
         assert data["status"] == 404
         assert isinstance(data["detail"], str)
         assert data["detail"] == AliasDomainNotFoundError().detail
@@ -176,6 +176,7 @@ class TestCreateAlias:
 
         assert response.status_code == 403
         data = response.json()
+        assert isinstance(data["status"], int)
         assert data["status"] == 403
         assert isinstance(data["detail"], str)
         assert data["detail"] == AliasPremiumDomainRequiresSubscriptionError().detail
@@ -214,6 +215,7 @@ class TestCreateAlias:
 
         assert response.status_code == 402
         data = response.json()
+        assert isinstance(data["status"], int)
         assert data["status"] == 402
         assert isinstance(data["detail"], str)
         assert data["detail"] == AliasMonthlyLimitExceededError().detail

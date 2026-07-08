@@ -62,12 +62,10 @@ def get_user_service(
     token_repo = TokenRepository(redis=redis_client)
     user_repo_for_tokens = UserRepository(session=db)
     token_service = TokenService(user_repo=user_repo_for_tokens, token_repo=token_repo)
-    alias_repo = AliasRepository(session=db)
     return UserService(
         user_repo=user_repo,
         verification_service=verification_service,
         token_service=token_service,
-        alias_repo=alias_repo,
     )
 
 

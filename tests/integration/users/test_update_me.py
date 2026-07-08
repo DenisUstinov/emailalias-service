@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
+from app.api.v1.endpoints import users as users_endpoint
 from app.core.exceptions import (
     ContactNotVerifiedError,
     CurrentPasswordInvalidError,
@@ -16,6 +17,7 @@ from app.core.security import hash_token, verify_password
 from app.models.domain import User, UserRole
 from app.schemas.responses import UserUpdateResponse
 from app.schemas.verification import VerificationActionType
+from app.services import aliases as aliases_service_module
 
 
 @pytest.mark.anyio
@@ -32,15 +34,12 @@ class TestUpdateUserMe:
         generate_test_email,
         monkeypatch,
     ) -> None:
-        from app.api.v1.endpoints import users as users_endpoint
-        from app.services import aliases as aliases_service_module
-
         mock_workflow = MagicMock()
         mock_group = MagicMock(return_value=mock_workflow)
         monkeypatch.setattr(users_endpoint, "group", mock_group)
         monkeypatch.setattr(
             aliases_service_module.AliasService,
-            "get_forwarded_alias_ids",
+            "get_active_alias_ids",
             AsyncMock(return_value=[uuid.uuid4()]),
         )
 
@@ -92,8 +91,6 @@ class TestUpdateUserMe:
         new_valid_test_password,
         monkeypatch,
     ) -> None:
-        from app.api.v1.endpoints import users as users_endpoint
-
         mock_group = MagicMock()
         monkeypatch.setattr(users_endpoint, "group", mock_group)
 
@@ -138,15 +135,12 @@ class TestUpdateUserMe:
         generate_test_email,
         monkeypatch,
     ) -> None:
-        from app.api.v1.endpoints import users as users_endpoint
-        from app.services import aliases as aliases_service_module
-
         mock_workflow = MagicMock()
         mock_group = MagicMock(return_value=mock_workflow)
         monkeypatch.setattr(users_endpoint, "group", mock_group)
         monkeypatch.setattr(
             aliases_service_module.AliasService,
-            "get_forwarded_alias_ids",
+            "get_active_alias_ids",
             AsyncMock(return_value=[uuid.uuid4()]),
         )
 

@@ -83,7 +83,7 @@ async def update_user_me(
     )
 
     if data.email is not None:
-        alias_ids = await alias_service.get_forwarded_alias_ids(user_id)
+        alias_ids = await alias_service.get_active_alias_ids(user_id)
         if alias_ids:
             workflow = group(
                 update_alias_forwarding_task.s(str(alias_id)) for alias_id in alias_ids

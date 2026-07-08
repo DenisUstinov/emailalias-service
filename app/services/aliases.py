@@ -14,7 +14,6 @@ from app.core.exceptions import (
     ExternalProviderRejectionError,
 )
 from app.core.mail_provider import MailProviderPort
-from app.core.security import generate_mailbox_password
 from app.models.domain import Alias, AliasStatus
 from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
@@ -113,14 +112,10 @@ class AliasService:
     async def provision_alias(self, alias_id: uuid.UUID) -> None:
         alias = await self.alias_repo.get_by_id(alias_id)
 
-        if alias.status in (
-            AliasStatus.PROVISIONED,
-            AliasStatus.FORWARDED,
-            AliasStatus.ACTIVE,
-        ):
+        if alias.status == AliasStatus.ACTIVE:
             logger.info(
-                "Alias already provisioned or beyond, skipping",
-                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
+                "Alias already active, skipping provisioning",
+                extra={"alias_id": str(alias_id)},
             )
             return
 
@@ -131,95 +126,13 @@ class AliasService:
             )
             return
 
-        domain = await self.domain_repo.get_by_id(alias.domain_id)
-        mailbox_password = generate_mailbox_password()
-        mailbox_name = f"{alias.local_part}.{alias.random_part}"
-
-        try:
-            self.mail_provider.create_mailbox(
-                domain=domain.fqdn,
-                mailbox=mailbox_name,
-                password=mailbox_password,
-            )
-        except ExternalProviderRejectionError as e:
-            logger.error(
-                "Mailbox creation rejected by provider: %s",
-                e.detail,
-                extra={"alias_id": str(alias_id)},
-            )
-            alias.status = AliasStatus.FAILED
-            return
-
-        alias.status = AliasStatus.PROVISIONED
-        logger.info("Mailbox created, alias provisioned", extra={"alias_id": str(alias_id)})
-
-    async def enable_forwarding(self, alias_id: uuid.UUID) -> None:
-        alias = await self.alias_repo.get_by_id(alias_id)
-
-        if alias.status in (AliasStatus.FORWARDED, AliasStatus.ACTIVE):
-            logger.info(
-                "Forwarding already enabled, skipping",
-                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
-            )
-            return
-
-        if alias.status != AliasStatus.PROVISIONED:
-            logger.warning(
-                "Alias is not provisioned, cannot enable forwarding",
-                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
-            )
-            return
-
-        domain = await self.domain_repo.get_by_id(alias.domain_id)
         user = await self.user_repo.get_by_id(alias.user_id)
-        mailbox_name = f"{alias.local_part}.{alias.random_part}"
 
         try:
-            self.mail_provider.enable_forwarding(
-                domain=domain.fqdn,
-                mailbox=mailbox_name,
-                target_email=user.email,
-            )
+            await self.mail_provider.provision_alias(alias, user.email)
         except ExternalProviderRejectionError as e:
             logger.error(
-                "Forwarding enabling rejected by provider: %s",
-                e.detail,
-                extra={"alias_id": str(alias_id)},
-            )
-            alias.status = AliasStatus.FAILED
-            return
-
-        alias.status = AliasStatus.FORWARDED
-        logger.info("Forwarding enabled", extra={"alias_id": str(alias_id)})
-
-    async def update_settings(self, alias_id: uuid.UUID) -> None:
-        alias = await self.alias_repo.get_by_id(alias_id)
-
-        if alias.status == AliasStatus.ACTIVE:
-            logger.info(
-                "Alias already active, skipping settings update",
-                extra={"alias_id": str(alias_id)},
-            )
-            return
-
-        if alias.status != AliasStatus.FORWARDED:
-            logger.warning(
-                "Forwarding not enabled, cannot update settings",
-                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
-            )
-            return
-
-        domain = await self.domain_repo.get_by_id(alias.domain_id)
-        mailbox_name = f"{alias.local_part}.{alias.random_part}"
-
-        try:
-            self.mail_provider.update_settings(
-                domain=domain.fqdn,
-                mailbox=mailbox_name,
-            )
-        except ExternalProviderRejectionError as e:
-            logger.error(
-                "Settings update rejected by provider: %s",
+                "Alias provisioning rejected by provider: %s",
                 e.detail,
                 extra={"alias_id": str(alias_id)},
             )
@@ -227,56 +140,32 @@ class AliasService:
             return
 
         alias.status = AliasStatus.ACTIVE
-        logger.info("Mailbox settings updated, alias activated", extra={"alias_id": str(alias_id)})
+        logger.info("Alias provisioned and activated", extra={"alias_id": str(alias_id)})
 
     async def update_forwarding_email(self, alias_id: uuid.UUID) -> None:
         alias = await self.alias_repo.get_by_id(alias_id)
 
-        if alias.status != AliasStatus.FORWARDED:
+        if alias.status != AliasStatus.ACTIVE:
             logger.info(
-                "Alias is not in FORWARDED state, skipping forwarding update",
+                "Alias is not in ACTIVE state, skipping forwarding update",
                 extra={"alias_id": str(alias_id), "current_status": alias.status.value},
             )
             return
 
-        domain = await self.domain_repo.get_by_id(alias.domain_id)
         user = await self.user_repo.get_by_id(alias.user_id)
-        mailbox_name = f"{alias.local_part}.{alias.random_part}"
 
         try:
-            self.mail_provider.enable_forwarding(
-                domain=domain.fqdn,
-                mailbox=mailbox_name,
-                target_email=user.email,
+            await self.mail_provider.update_forwarding_email(alias, user.email)
+            logger.info(
+                "Forwarding email updated successfully",
+                extra={"alias_id": str(alias_id), "new_email": user.email},
             )
         except ExternalProviderRejectionError as e:
             logger.error(
-                "Forwarding update rejected by provider: %s",
+                "Forwarding email update rejected by provider: %s",
                 e.detail,
                 extra={"alias_id": str(alias_id)},
             )
-            updated = await self.alias_repo.try_update_status(
-                alias_id, AliasStatus.FORWARDED, AliasStatus.FAILED
-            )
-            if not updated:
-                logger.warning(
-                    "Alias status changed during execution, skipping FAILED update",
-                    extra={"alias_id": str(alias_id)},
-                )
-            return
 
-        updated = await self.alias_repo.try_update_status(
-            alias_id, AliasStatus.FORWARDED, AliasStatus.ACTIVE
-        )
-        if updated:
-            logger.info(
-                "Forwarding email updated, alias activated", extra={"alias_id": str(alias_id)}
-            )
-        else:
-            logger.warning(
-                "Alias status changed during execution, skipping ACTIVE update",
-                extra={"alias_id": str(alias_id)},
-            )
-
-    async def get_forwarded_alias_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
-        return await self.alias_repo.get_forwarded_alias_ids_by_user(user_id)
+    async def get_active_alias_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
+        return await self.alias_repo.get_active_alias_ids_by_user(user_id)

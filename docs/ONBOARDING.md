@@ -47,6 +47,7 @@ make migrate-new
 # Message: Initial tables
 # Message: Add alias status provisioned
 # Message: Add alias status forwarded
+# Message: Remove alias status provisioned and forwarded
 ```
 
 ## 5. Инициализация домена по умолчанию

@@ -26,13 +26,16 @@ async def alias_service_context() -> AsyncGenerator[AliasService, None]:
             domain_repo = DomainRepository(session)
             user_repo = UserRepository(session)
             provider = BegetMailProviderAdapter()
-            service = AliasService(alias_repo, domain_repo, user_repo, provider)
             try:
-                yield service
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
+                service = AliasService(alias_repo, domain_repo, user_repo, provider)
+                try:
+                    yield service
+                    await session.commit()
+                except Exception:
+                    await session.rollback()
+                    raise
+            finally:
+                await provider.close()
     finally:
         await engine.dispose()
 

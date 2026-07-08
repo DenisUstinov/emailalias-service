@@ -5,10 +5,7 @@ import pytest
 
 from app.models.domain import Alias, AliasStatus
 from app.repositories.aliases import AliasRepository
-from tests.helpers import (
-    assert_session_execute_called_with_select,
-    assert_session_execute_called_with_update,
-)
+from tests.helpers import assert_session_execute_called_with_select
 
 
 @pytest.mark.anyio
@@ -45,6 +42,21 @@ class TestAliasRepository:
         assert_session_execute_called_with_select(mock_session)
         assert count == 5
 
+    async def test_get_by_id_executes_select_and_returns_scalar(
+        self, mock_session: MagicMock
+    ) -> None:
+        alias_mock = MagicMock()
+        result_mock = MagicMock()
+        result_mock.scalar_one.return_value = alias_mock
+        mock_session.execute.return_value = result_mock
+
+        repo = AliasRepository(session=mock_session)
+        target_id = uuid.uuid4()
+        result = await repo.get_by_id(target_id)
+
+        assert_session_execute_called_with_select(mock_session)
+        assert result is alias_mock
+
     async def test_update_status_fetches_alias_updates_and_flushes(
         self, mock_session: MagicMock
     ) -> None:
@@ -63,20 +75,7 @@ class TestAliasRepository:
         assert alias_mock.status == AliasStatus.ACTIVE
         mock_session.flush.assert_awaited_once()
 
-    async def test_reset_active_to_forwarded_for_user_executes_update_and_flushes(
-        self, mock_session: MagicMock
-    ) -> None:
-        result_mock = MagicMock()
-        mock_session.execute.return_value = result_mock
-
-        repo = AliasRepository(session=mock_session)
-        target_user_id = uuid.uuid4()
-        await repo.reset_active_to_forwarded_for_user(target_user_id)
-
-        assert_session_execute_called_with_update(mock_session)
-        mock_session.flush.assert_awaited_once()
-
-    async def test_get_forwarded_alias_ids_by_user_executes_select_and_returns_list(
+    async def test_get_active_alias_ids_by_user_executes_select_and_returns_list(
         self, mock_session: MagicMock
     ) -> None:
         id1, id2 = uuid.uuid4(), uuid.uuid4()
@@ -86,35 +85,7 @@ class TestAliasRepository:
 
         repo = AliasRepository(session=mock_session)
         target_user_id = uuid.uuid4()
-        result = await repo.get_forwarded_alias_ids_by_user(target_user_id)
+        result = await repo.get_active_alias_ids_by_user(target_user_id)
 
         assert_session_execute_called_with_select(mock_session)
         assert result == [id1, id2]
-
-    async def test_try_update_status_executes_update_and_returns_true(
-        self, mock_session: MagicMock
-    ) -> None:
-        result_mock = MagicMock()
-        result_mock.rowcount = 1
-        mock_session.execute.return_value = result_mock
-
-        repo = AliasRepository(session=mock_session)
-        target_id = uuid.uuid4()
-        updated = await repo.try_update_status(target_id, AliasStatus.FORWARDED, AliasStatus.ACTIVE)
-
-        assert_session_execute_called_with_update(mock_session)
-        mock_session.flush.assert_awaited_once()
-        assert updated is True
-
-    async def test_try_update_status_returns_false_when_no_rows_updated(
-        self, mock_session: MagicMock
-    ) -> None:
-        result_mock = MagicMock()
-        result_mock.rowcount = 0
-        mock_session.execute.return_value = result_mock
-
-        repo = AliasRepository(session=mock_session)
-        target_id = uuid.uuid4()
-        updated = await repo.try_update_status(target_id, AliasStatus.FORWARDED, AliasStatus.ACTIVE)
-
-        assert updated is False

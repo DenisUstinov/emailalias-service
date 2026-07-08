@@ -1,5 +1,5 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -9,282 +9,249 @@ from app.core.exceptions import (
     ExternalProviderUnavailableError,
 )
 from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
+from app.models.domain import Alias, Domain
 
 
-class TestBegetMailProviderAdapter:
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_success_json_response(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
+@pytest.mark.anyio
+class TestBegetMailProviderAdapterMakeRequest:
+    async def test_success_json_response(self) -> None:
+        adapter = BegetMailProviderAdapter()
         mock_response = MagicMock()
         mock_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
         mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
 
+        with patch.object(
+            adapter._client, "get", new_callable=AsyncMock, return_value=mock_response
+        ) as mock_get:
+            await adapter._make_request("testMethod", {"key": "value"})
+
+        mock_get.assert_awaited_once()
+        call_args = mock_get.await_args
+        assert call_args[0][0] == "/testMethod"
+        assert json.loads(call_args[1]["params"]["input_data"]) == {"key": "value"}
+
+    async def test_api_level_error(self) -> None:
         adapter = BegetMailProviderAdapter()
-        adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        mock_client.get.assert_called_once()
-        call_args = mock_client.get.call_args
-        assert call_args[0][0] == "/createMailbox"
-        assert json.loads(call_args[1]["params"]["input_data"]) == {
-            "domain": "example.com",
-            "mailbox": "test.user",
-            "mailbox_password": "SecurePass123",
-        }
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_success_text_true_response(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.side_effect = ValueError("No JSON")
-        mock_response.text = "true"
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-        adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        mock_client.get.assert_called_once()
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_api_level_error(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
         mock_response = MagicMock()
         mock_response.json.return_value = {"status": "error", "error_text": "Invalid domain"}
         mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
 
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
+        with (
+            patch.object(
+                adapter._client, "get", new_callable=AsyncMock, return_value=mock_response
+            ),
+            pytest.raises(ExternalProviderRejectionError) as exc_info,
+        ):
+            await adapter._make_request("testMethod", {})
 
         assert exc_info.value.detail == "Invalid domain"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_method_level_error(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
+    async def test_method_level_error(self) -> None:
+        adapter = BegetMailProviderAdapter()
         mock_response = MagicMock()
         mock_response.json.return_value = {
             "status": "success",
             "answer": {"status": "error", "errors": [{"error_text": "Mailbox exists"}]},
         }
         mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
 
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
+        with (
+            patch.object(
+                adapter._client, "get", new_callable=AsyncMock, return_value=mock_response
+            ),
+            pytest.raises(ExternalProviderRejectionError) as exc_info,
+        ):
+            await adapter._make_request("testMethod", {})
 
         assert exc_info.value.detail == "Mailbox exists"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_timeout_raises_unavailable(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.get.side_effect = httpx.TimeoutException("Timeout")
-
+    async def test_timeout_raises_unavailable(self) -> None:
         adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderUnavailableError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
+        with (
+            patch.object(
+                adapter._client,
+                "get",
+                new_callable=AsyncMock,
+                side_effect=httpx.TimeoutException("Timeout"),
+            ),
+            pytest.raises(ExternalProviderUnavailableError) as exc_info,
+        ):
+            await adapter._make_request("testMethod", {})
 
         assert exc_info.value.detail == "Provider timeout"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_http_error_raises_unavailable(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
+    async def test_http_error_raises_unavailable(self) -> None:
+        adapter = BegetMailProviderAdapter()
         mock_http_response = MagicMock()
         mock_http_response.status_code = 500
-        mock_client.get.side_effect = httpx.HTTPStatusError(
-            "Server Error", request=MagicMock(), response=mock_http_response
-        )
-
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderUnavailableError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
+        with (
+            patch.object(
+                adapter._client,
+                "get",
+                new_callable=AsyncMock,
+                side_effect=httpx.HTTPStatusError(
+                    "Server Error", request=MagicMock(), response=mock_http_response
+                ),
+            ),
+            pytest.raises(ExternalProviderUnavailableError) as exc_info,
+        ):
+            await adapter._make_request("testMethod", {})
 
         assert exc_info.value.detail == "Provider HTTP error"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_create_mailbox_connection_error_raises_unavailable(
-        self, mock_client_cls: MagicMock
-    ) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
-
+    async def test_connection_error_raises_unavailable(self) -> None:
         adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderUnavailableError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
+        with (
+            patch.object(
+                adapter._client,
+                "get",
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError("Connection refused"),
+            ),
+            pytest.raises(ExternalProviderUnavailableError) as exc_info,
+        ):
+            await adapter._make_request("testMethod", {})
 
         assert exc_info.value.detail == "Provider connection error"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_enable_forwarding_success(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
+@pytest.mark.anyio
+class TestBegetMailProviderAdapterProvisionAlias:
+    async def test_success_provisions_alias(self) -> None:
         adapter = BegetMailProviderAdapter()
-        adapter.enable_forwarding("example.com", "test.user", "forward@example.com")
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
 
-        mock_client.get.assert_called_once()
-        call_args = mock_client.get.call_args
-        assert call_args[0][0] == "/forwardListAddMailbox"
-        assert json.loads(call_args[1]["params"]["input_data"]) == {
-            "domain": "example.com",
-            "mailbox": "test.user",
-            "forward_mailbox": "forward@example.com",
-        }
+        with (
+            patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
+            patch.object(adapter, "_generate_mailbox_password", return_value="SecurePass123"),
+        ):
+            await adapter.provision_alias(alias, "forward@example.com")
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_enable_forwarding_failure(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
+        assert mock_make_request.await_count == 3
+        mock_make_request.assert_any_await(
+            "createMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "mailbox_password": "SecurePass123",
+            },
+        )
+        mock_make_request.assert_any_await(
+            "forwardListAddMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "forward_mailbox": "forward@example.com",
+            },
+        )
+        mock_make_request.assert_any_await(
+            "changeMailboxSettings",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "spam_filter_status": 0,
+                "spam_filter": 20,
+                "forward_mail_status": "forward_and_delete",
+            },
+        )
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "error", "error_text": "Mailbox not found"}
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
+    async def test_raises_on_provider_rejection(self) -> None:
         adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
 
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.enable_forwarding("example.com", "test.user", "forward@example.com")
+        with (
+            patch.object(
+                adapter,
+                "_make_request",
+                new_callable=AsyncMock,
+                side_effect=ExternalProviderRejectionError(detail="quota exceeded"),
+            ),
+            pytest.raises(ExternalProviderRejectionError),
+        ):
+            await adapter.provision_alias(alias, "forward@example.com")
 
-        assert exc_info.value.detail == "Mailbox not found"
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_update_settings_success(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "success", "answer": {"status": "success"}}
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
+@pytest.mark.anyio
+class TestBegetMailProviderAdapterUpdateForwardingEmail:
+    async def test_success_updates_forwarding_email(self) -> None:
         adapter = BegetMailProviderAdapter()
-        adapter.update_settings("example.com", "test.user")
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
 
-        mock_client.get.assert_called_once()
-        call_args = mock_client.get.call_args
-        assert call_args[0][0] == "/changeMailboxSettings"
-        assert json.loads(call_args[1]["params"]["input_data"]) == {
-            "domain": "example.com",
-            "mailbox": "test.user",
-            "spam_filter_status": 0,
-            "spam_filter": 20,
-            "forward_mail_status": "forward_and_delete",
-        }
+        with (
+            patch.object(
+                adapter,
+                "_get_current_forwarding_list",
+                new_callable=AsyncMock,
+                return_value=["old@example.com"],
+            ) as mock_get_list,
+            patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
+        ):
+            await adapter.update_forwarding_email(alias, "new@example.com")
 
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_update_settings_failure(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
+        mock_get_list.assert_awaited_once_with("example.com", "test.abc123")
+        assert mock_make_request.await_count == 3
+        mock_make_request.assert_any_await(
+            "forwardListDeleteMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "forward_mailbox": "old@example.com",
+            },
+        )
+        mock_make_request.assert_any_await(
+            "forwardListAddMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "forward_mailbox": "new@example.com",
+            },
+        )
+        mock_make_request.assert_any_await(
+            "changeMailboxSettings",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "spam_filter_status": 0,
+                "spam_filter": 20,
+                "forward_mail_status": "forward_and_delete",
+            },
+        )
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "status": "error",
-            "error_text": "Settings update failed",
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
+    async def test_skips_deletion_if_list_empty(self) -> None:
         adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
 
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.update_settings("example.com", "test.user")
+        with (
+            patch.object(
+                adapter,
+                "_get_current_forwarding_list",
+                new_callable=AsyncMock,
+                return_value=[],
+            ),
+            patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
+        ):
+            await adapter.update_forwarding_email(alias, "new@example.com")
 
-        assert exc_info.value.detail == "Settings update failed"
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_non_json_non_true_response_raises_rejection(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.side_effect = ValueError("No JSON")
-        mock_response.text = "unexpected error message"
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        assert exc_info.value.detail == "unexpected error message"
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_method_level_error_empty_errors_list(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "status": "success",
-            "answer": {"status": "error", "errors": []},
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        assert exc_info.value.detail == "Unknown method error"
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_method_level_error_missing_error_text(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "status": "success",
-            "answer": {"status": "error", "errors": [{"other_field": "value"}]},
-        }
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-
-        with pytest.raises(ExternalProviderRejectionError) as exc_info:
-            adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        assert exc_info.value.detail == "Unknown method error"
-
-    @patch("app.infrastructure.beget_mail_provider.httpx.Client")
-    def test_answer_not_dict_skips_check(self, mock_client_cls: MagicMock) -> None:
-        mock_client = MagicMock()
-        mock_client_cls.return_value = mock_client
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "success", "answer": "some_string"}
-        mock_response.raise_for_status.return_value = None
-        mock_client.get.return_value = mock_response
-
-        adapter = BegetMailProviderAdapter()
-        adapter.create_mailbox("example.com", "test.user", "SecurePass123")
-
-        mock_client.get.assert_called_once()
+        assert mock_make_request.await_count == 2
+        mock_make_request.assert_any_await(
+            "forwardListAddMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "forward_mailbox": "new@example.com",
+            },
+        )
+        mock_make_request.assert_any_await(
+            "changeMailboxSettings",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+                "spam_filter_status": 0,
+                "spam_filter": 20,
+                "forward_mail_status": "forward_and_delete",
+            },
+        )
