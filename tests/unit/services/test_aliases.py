@@ -434,3 +434,113 @@ class TestAliasServiceGetActiveAliasIds:
 
         alias_repo.get_active_alias_ids_by_user.assert_awaited_once_with(user_id)
         assert result == alias_ids
+
+
+@pytest.mark.anyio
+class TestAliasServiceDeleteAlias:
+    async def test_success_calls_repo_delete(
+        self,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        alias_repo = mock_async_repository
+        alias_repo.delete.return_value = 1
+
+        service = _make_service(alias_repo=alias_repo)
+        alias_id = test_uuids["user_1"]
+        user_id = test_uuids["user_2"]
+
+        await service.delete_alias(alias_id=alias_id, user_id=user_id)
+
+        alias_repo.delete.assert_awaited_once_with(alias_id, user_id)
+
+    async def test_success_ignores_rowcount_zero(
+        self,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        alias_repo = mock_async_repository
+        alias_repo.delete.return_value = 0
+
+        service = _make_service(alias_repo=alias_repo)
+        alias_id = test_uuids["user_1"]
+        user_id = test_uuids["user_2"]
+
+        await service.delete_alias(alias_id=alias_id, user_id=user_id)
+
+        alias_repo.delete.assert_awaited_once_with(alias_id, user_id)
+
+    async def test_delete_propagates_repository_exceptions(
+        self,
+        test_uuids: dict[str, UUID],
+        mock_async_repository: AsyncMock,
+    ) -> None:
+        alias_repo = mock_async_repository
+        alias_repo.delete.side_effect = Exception("Database error")
+
+        service = _make_service(alias_repo=alias_repo)
+        alias_id = test_uuids["user_1"]
+        user_id = test_uuids["user_2"]
+
+        with pytest.raises(Exception, match="Database error"):
+            await service.delete_alias(alias_id=alias_id, user_id=user_id)
+
+        alias_repo.delete.assert_awaited_once_with(alias_id, user_id)
+
+
+@pytest.mark.anyio
+class TestAliasServiceDeprovisionAlias:
+    async def test_success_deprovisions_deleted_alias(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(alias_id=alias_id, status=AliasStatus.DELETED)
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = AsyncMock()
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+        await service.deprovision_alias(alias_id)
+
+        mail_provider.deprovision_alias.assert_awaited_once_with(alias)
+
+    async def test_skips_if_alias_not_deleted(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(alias_id=alias_id, status=AliasStatus.ACTIVE)
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = AsyncMock()
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+        await service.deprovision_alias(alias_id)
+
+        mail_provider.deprovision_alias.assert_not_awaited()
+
+    async def test_logs_and_continues_on_provider_rejection(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        alias_id = test_uuids["user_1"]
+        alias = make_alias(alias_id=alias_id, status=AliasStatus.DELETED)
+
+        alias_repo = AsyncMock()
+        alias_repo.get_by_id.return_value = alias
+        mail_provider = AsyncMock()
+        mail_provider.deprovision_alias.side_effect = ExternalProviderRejectionError(
+            detail="quota exceeded"
+        )
+
+        service = _make_service(alias_repo=alias_repo, mail_provider=mail_provider)
+        await service.deprovision_alias(alias_id)
+
+        mail_provider.deprovision_alias.assert_awaited_once_with(alias)
+        assert alias.status == AliasStatus.DELETED

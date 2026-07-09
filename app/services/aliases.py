@@ -167,5 +167,31 @@ class AliasService:
                 extra={"alias_id": str(alias_id)},
             )
 
+    async def delete_alias(self, alias_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        await self.alias_repo.delete(alias_id, user_id)
+
+    async def deprovision_alias(self, alias_id: uuid.UUID) -> None:
+        alias = await self.alias_repo.get_by_id(alias_id)
+
+        if alias.status != AliasStatus.DELETED:
+            logger.info(
+                "Alias is not in DELETED state, skipping deprovisioning",
+                extra={"alias_id": str(alias_id), "current_status": alias.status.value},
+            )
+            return
+
+        try:
+            await self.mail_provider.deprovision_alias(alias)
+            logger.info(
+                "Alias deprovisioned successfully on provider",
+                extra={"alias_id": str(alias_id)},
+            )
+        except ExternalProviderRejectionError as e:
+            logger.error(
+                "Alias deprovisioning rejected by provider: %s",
+                e.detail,
+                extra={"alias_id": str(alias_id)},
+            )
+
     async def get_active_alias_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
         return await self.alias_repo.get_active_alias_ids_by_user(user_id)

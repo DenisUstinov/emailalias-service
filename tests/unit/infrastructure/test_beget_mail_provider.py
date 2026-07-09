@@ -255,3 +255,66 @@ class TestBegetMailProviderAdapterUpdateForwardingEmail:
                 "forward_mail_status": "forward_and_delete",
             },
         )
+
+
+@pytest.mark.anyio
+class TestBegetMailProviderAdapterDeprovisionAlias:
+    async def test_success_deprovisions_alias(self) -> None:
+        adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
+
+        with patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request:
+            await adapter.deprovision_alias(alias)
+
+        mock_make_request.assert_awaited_once_with(
+            "dropMailbox",
+            {
+                "domain": "example.com",
+                "mailbox": "test.abc123",
+            },
+        )
+
+    async def test_swallows_not_found_error(self) -> None:
+        adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
+
+        with patch.object(
+            adapter,
+            "_make_request",
+            new_callable=AsyncMock,
+            side_effect=ExternalProviderRejectionError(detail="Mailbox not found"),
+        ):
+            await adapter.deprovision_alias(alias)
+
+    async def test_swallows_does_not_exist_error(self) -> None:
+        adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
+
+        with patch.object(
+            adapter,
+            "_make_request",
+            new_callable=AsyncMock,
+            side_effect=ExternalProviderRejectionError(detail="Mailbox does not exist"),
+        ):
+            await adapter.deprovision_alias(alias)
+
+    async def test_raises_on_other_provider_rejection(self) -> None:
+        adapter = BegetMailProviderAdapter()
+        domain = Domain(fqdn="example.com")
+        alias = Alias(local_part="test", random_part="abc123", domain=domain)
+
+        with (
+            patch.object(
+                adapter,
+                "_make_request",
+                new_callable=AsyncMock,
+                side_effect=ExternalProviderRejectionError(detail="quota exceeded"),
+            ),
+            pytest.raises(ExternalProviderRejectionError) as exc_info,
+        ):
+            await adapter.deprovision_alias(alias)
+
+        assert exc_info.value.detail == "quota exceeded"

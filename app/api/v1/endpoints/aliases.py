@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from app.core.config import settings
 from app.core.dependencies import get_alias_service, get_current_user_id
 from app.core.rate_limiter import limiter
-from app.infrastructure.celery.tasks import provision_alias_task
+from app.infrastructure.celery.tasks import deprovision_alias_task, provision_alias_task
 from app.schemas.requests import AliasCreateRequest
 from app.schemas.responses import AliasCreateResponse
 from app.services.aliases import AliasService
@@ -14,14 +14,34 @@ from app.services.aliases import AliasService
 router = APIRouter()
 
 
+@router.delete(
+    "/{alias_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete an alias",
+    description="Soft-delete an email alias and mark it as removed.",
+    responses={
+        204: {"description": "Alias successfully deleted"},
+        401: {"description": "Invalid or expired token"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
+@limiter.limit(settings.RATE_LIMIT_ALIAS_DELETION)
+async def delete_alias(
+    request: Request,
+    alias_id: uuid.UUID,
+    user_id: Annotated[uuid.UUID, Depends(get_current_user_id)],
+    service: Annotated[AliasService, Depends(get_alias_service)],
+) -> None:
+    await service.delete_alias(alias_id=alias_id, user_id=user_id)
+    deprovision_alias_task.apply_async(args=[str(alias_id)])
+
+
 @router.post(
     "",
     response_model=AliasCreateResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Create a new alias",
-    description="Create a new email alias attached to a specified domain. A random 6-character \
-    suffix will be appended to the user-provided local part. The physical mailbox creation and \
-    forwarding configuration are processed asynchronously in the background.",
+    description="Create a new email alias attached to a specified domain.",
     responses={
         202: {
             "description": "Alias creation request accepted and queued for background processing"

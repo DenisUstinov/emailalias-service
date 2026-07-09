@@ -52,7 +52,7 @@ class AliasStatus(enum.StrEnum):
     PENDING = "pending"
     ACTIVE = "active"
     FAILED = "failed"
-    DELETING = "deleting"
+    DELETED = "deleted"
 
 
 class Alias(Base):

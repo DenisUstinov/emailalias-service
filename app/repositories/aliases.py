@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text, update
 
 from app.models.domain import Alias, AliasStatus
 
@@ -17,6 +17,11 @@ class AliasRepository:
         return alias
 
     async def count_created_in_window(self, user_id: uuid.UUID, window_days: int) -> int:
+        lock_key = f"alias_limit:{user_id}"
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": lock_key}
+        )
+
         cutoff = datetime.now(UTC) - timedelta(days=window_days)
         stmt = select(func.count(Alias.id)).where(
             Alias.user_id == user_id,
@@ -42,3 +47,16 @@ class AliasRepository:
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def delete(self, alias_id: uuid.UUID, user_id: uuid.UUID) -> int:
+        stmt = (
+            update(Alias)
+            .where(
+                Alias.id == alias_id,
+                Alias.user_id == user_id,
+            )
+            .values(status=AliasStatus.DELETED, updated_at=func.now())
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount

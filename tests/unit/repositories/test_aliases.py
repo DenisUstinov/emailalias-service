@@ -29,7 +29,7 @@ class TestAliasRepository:
         mock_session.refresh.assert_awaited_once_with(alias)
         assert result is alias
 
-    async def test_count_created_in_window_executes_select_and_returns_scalar(
+    async def test_count_created_in_window_returns_correct_count(
         self, mock_session: MagicMock
     ) -> None:
         result_mock = MagicMock()
@@ -37,10 +37,11 @@ class TestAliasRepository:
         mock_session.execute.return_value = result_mock
 
         repo = AliasRepository(session=mock_session)
-        count = await repo.count_created_in_window("00000000-0000-0000-0000-000000000001", 30)
+        user_id = uuid.uuid4()
+        count = await repo.count_created_in_window(user_id, 30)
 
-        assert_session_execute_called_with_select(mock_session)
         assert count == 5
+        assert mock_session.execute.await_count >= 1
 
     async def test_get_by_id_executes_select_and_returns_scalar(
         self, mock_session: MagicMock
@@ -62,7 +63,6 @@ class TestAliasRepository:
     ) -> None:
         alias_mock = MagicMock()
         alias_mock.status = AliasStatus.PENDING
-
         result_mock = MagicMock()
         result_mock.scalar_one.return_value = alias_mock
         mock_session.execute.return_value = result_mock
@@ -89,3 +89,40 @@ class TestAliasRepository:
 
         assert_session_execute_called_with_select(mock_session)
         assert result == [id1, id2]
+
+    async def test_delete_executes_update_and_returns_rowcount(
+        self, mock_session: MagicMock
+    ) -> None:
+        result_mock = MagicMock()
+        result_mock.rowcount = 1
+        mock_session.execute.return_value = result_mock
+
+        repo = AliasRepository(session=mock_session)
+        alias_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        rowcount = await repo.delete(alias_id, user_id)
+
+        assert rowcount == 1
+        mock_session.execute.assert_awaited_once()
+
+        call_args = mock_session.execute.call_args[0][0]
+        sql_str = str(call_args).lower()
+        assert "update" in sql_str
+        assert "status=:status" in sql_str
+        assert "where" in sql_str
+        mock_session.flush.assert_awaited_once()
+
+    async def test_delete_returns_zero_when_alias_not_found_or_not_owned(
+        self, mock_session: MagicMock
+    ) -> None:
+        result_mock = MagicMock()
+        result_mock.rowcount = 0
+        mock_session.execute.return_value = result_mock
+
+        repo = AliasRepository(session=mock_session)
+        alias_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        rowcount = await repo.delete(alias_id, user_id)
+
+        assert rowcount == 0
+        mock_session.flush.assert_awaited_once()

@@ -19,3 +19,19 @@ class TestAliasesRateLimits:
             "local_part": "test",
         }
         await rate_limit_checker(http_client, "POST", "/api/v1/aliases", limit, payload, headers)
+
+    async def test_rate_limit_for_delete_alias(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        rate_limit_checker,
+    ) -> None:
+        limit = int(settings.RATE_LIMIT_ALIAS_DELETION.split("/")[0])
+        headers = await authenticated_headers()
+        await rate_limit_checker(
+            http_client,
+            "DELETE",
+            "/api/v1/aliases/00000000-0000-0000-0000-000000000000",
+            limit,
+            headers=headers,
+        )

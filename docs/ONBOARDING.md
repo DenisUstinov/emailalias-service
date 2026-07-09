@@ -17,11 +17,11 @@ cp .env.example .env
 
 ## 2. Инициализация среды
 
-Установите зависимости и настройте pre-commit хуки:
+Установите зависимости и настройте pre-commit хуки (для коммитов и пушей):
 
 ```bash
 uv sync
-uv run pre-commit install
+uv run pre-commit install -t pre-commit -t pre-push
 ```
 
 ## 3. Запуск базы данных
@@ -48,6 +48,7 @@ make migrate-new
 # Message: Add alias status provisioned
 # Message: Add alias status forwarded
 # Message: Remove alias status provisioned and forwarded
+# Message: Rename alias status deleting to deleted
 ```
 
 ## 5. Инициализация домена по умолчанию

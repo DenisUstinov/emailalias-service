@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "provision_alias_task",
     "update_alias_forwarding_task",
+    "deprovision_alias_task",
     "send_otp_task",
 ]
 
@@ -51,6 +52,25 @@ def update_alias_forwarding_task(self, alias_id: str) -> str:
     async def run() -> None:
         async with alias_service_context() as service:
             await service.update_forwarding_email(alias_uuid)
+
+    asyncio.run(run())
+    return alias_id
+
+
+@celery_app.task(
+    bind=True,
+    autoretry_for=(ExternalProviderUnavailableError,),
+    retry_backoff=True,
+    max_retries=5,
+    rate_limit="1/s",
+)
+def deprovision_alias_task(self, alias_id: str) -> str:
+    alias_uuid = uuid.UUID(alias_id)
+    logger.info("Starting alias deprovisioning task", extra={"alias_id": alias_id})
+
+    async def run() -> None:
+        async with alias_service_context() as service:
+            await service.deprovision_alias(alias_uuid)
 
     asyncio.run(run())
     return alias_id

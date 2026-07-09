@@ -195,3 +195,24 @@ class BegetMailProviderAdapter:
 
         await asyncio.sleep(0.9)
         await self._setup_forwarding(domain, mailbox_name, new_email)
+
+    async def deprovision_alias(self, alias: Alias) -> None:
+        domain = alias.domain.fqdn
+        mailbox_name = f"{alias.local_part}.{alias.random_part}"
+
+        try:
+            await self._make_request(
+                "dropMailbox",
+                {"domain": domain, "mailbox": mailbox_name},
+            )
+            logger.info(
+                "Mailbox successfully dropped on provider",
+                extra={"domain": domain, "mailbox": mailbox_name},
+            )
+        except ExternalProviderRejectionError as e:
+            if "not found" not in e.detail.lower() and "does not exist" not in e.detail.lower():
+                raise
+            logger.info(
+                "Mailbox already removed or not found, continuing",
+                extra={"domain": domain, "mailbox": mailbox_name},
+            )
