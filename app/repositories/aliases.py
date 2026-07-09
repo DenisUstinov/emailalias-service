@@ -48,6 +48,18 @@ class AliasRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_aliases_by_user(self, user_id: uuid.UUID) -> list[Alias]:
+        stmt = (
+            select(Alias)
+            .where(
+                Alias.user_id == user_id,
+                Alias.status != AliasStatus.DELETED,
+            )
+            .order_by(Alias.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def delete(self, alias_id: uuid.UUID, user_id: uuid.UUID) -> int:
         stmt = (
             update(Alias)

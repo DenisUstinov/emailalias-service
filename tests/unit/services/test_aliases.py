@@ -15,7 +15,7 @@ from app.core.exceptions import (
     ExternalProviderRejectionError,
 )
 from app.models.domain import Alias, AliasStatus, Domain
-from app.schemas.responses import AliasCreateResponse
+from app.schemas.responses import AliasCreateResponse, AliasListItemResponse
 from app.services.aliases import AliasService
 from tests.helpers import assert_exception_details
 
@@ -434,6 +434,48 @@ class TestAliasServiceGetActiveAliasIds:
 
         alias_repo.get_active_alias_ids_by_user.assert_awaited_once_with(user_id)
         assert result == alias_ids
+
+
+@pytest.mark.anyio
+class TestAliasServiceGetAliases:
+    async def test_success_returns_mapped_aliases(
+        self,
+        test_uuids: dict[str, UUID],
+        make_alias: Callable[..., Alias],
+    ) -> None:
+        user_id = test_uuids["user_1"]
+        alias1 = make_alias(alias_id=test_uuids["user_2"], status=AliasStatus.ACTIVE)
+        alias2 = make_alias(alias_id=test_uuids["user_3"], status=AliasStatus.PENDING)
+
+        domain = Domain(id=UUID("00000000-0000-0000-0000-000000000099"), fqdn="example.com")
+        alias1.domain = domain
+        alias2.domain = domain
+
+        alias_repo = AsyncMock()
+        alias_repo.get_aliases_by_user.return_value = [alias1, alias2]
+
+        service = _make_service(alias_repo=alias_repo)
+        result = await service.get_aliases(user_id)
+
+        alias_repo.get_aliases_by_user.assert_awaited_once_with(user_id)
+        assert len(result) == 2
+        assert all(isinstance(item, AliasListItemResponse) for item in result)
+        assert result[0].id == alias1.id
+        assert result[1].id == alias2.id
+
+    async def test_success_returns_empty_list(
+        self,
+        test_uuids: dict[str, UUID],
+    ) -> None:
+        user_id = test_uuids["user_1"]
+        alias_repo = AsyncMock()
+        alias_repo.get_aliases_by_user.return_value = []
+
+        service = _make_service(alias_repo=alias_repo)
+        result = await service.get_aliases(user_id)
+
+        alias_repo.get_aliases_by_user.assert_awaited_once_with(user_id)
+        assert result == []
 
 
 @pytest.mark.anyio

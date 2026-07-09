@@ -8,10 +8,31 @@ from app.core.dependencies import get_alias_service, get_current_user_id
 from app.core.rate_limiter import limiter
 from app.infrastructure.celery.tasks import deprovision_alias_task, provision_alias_task
 from app.schemas.requests import AliasCreateRequest
-from app.schemas.responses import AliasCreateResponse
+from app.schemas.responses import AliasCreateResponse, AliasListItemResponse
 from app.services.aliases import AliasService
 
 router = APIRouter()
+
+
+@router.get(
+    "",
+    response_model=list[AliasListItemResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get user aliases",
+    description="Retrieve a list of all non-deleted aliases for the authenticated user.",
+    responses={
+        200: {"description": "List of aliases successfully retrieved"},
+        401: {"description": "Invalid or expired token"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
+@limiter.limit(settings.RATE_LIMIT_ALIASES_LIST)
+async def get_aliases(
+    request: Request,
+    user_id: Annotated[uuid.UUID, Depends(get_current_user_id)],
+    service: Annotated[AliasService, Depends(get_alias_service)],
+) -> list[AliasListItemResponse]:
+    return await service.get_aliases(user_id=user_id)
 
 
 @router.delete(

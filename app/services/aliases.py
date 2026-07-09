@@ -18,7 +18,7 @@ from app.models.domain import Alias, AliasStatus
 from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
 from app.repositories.users import UserRepository
-from app.schemas.responses import AliasCreateResponse
+from app.schemas.responses import AliasCreateResponse, AliasListItemResponse
 
 logger = logging.getLogger(__name__)
 
@@ -195,3 +195,7 @@ class AliasService:
 
     async def get_active_alias_ids(self, user_id: uuid.UUID) -> list[uuid.UUID]:
         return await self.alias_repo.get_active_alias_ids_by_user(user_id)
+
+    async def get_aliases(self, user_id: uuid.UUID) -> list[AliasListItemResponse]:
+        aliases = await self.alias_repo.get_aliases_by_user(user_id)
+        return [AliasListItemResponse.model_validate(alias) for alias in aliases]

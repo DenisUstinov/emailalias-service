@@ -27,6 +27,23 @@ class AliasCreateResponse(BaseModel):
     )
 
 
+class AliasListItemResponse(BaseModel):
+    id: UUID = Field(..., description="Unique identifier of the alias")
+    email: str = Field(..., description="Fully generated email address")
+    status: str = Field(..., description="Current status of the alias (pending, active, failed)")
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "email": "bugtracker.a3F9x2@example.com",
+                "status": "active",
+            }
+        },
+    )
+
+
 class DomainResponse(BaseModel):
     id: UUID = Field(..., description="Unique identifier of the domain in the local database")
     fqdn: str = Field(..., description="Fully qualified domain name used for mailbox creation")

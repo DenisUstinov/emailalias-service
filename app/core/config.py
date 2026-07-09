@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_DOMAINS: str = "60/minute"
     RATE_LIMIT_ALIAS_CREATION: str = "10/minute"
     RATE_LIMIT_ALIAS_DELETION: str = "10/minute"
+    RATE_LIMIT_ALIASES_LIST: str = "10/minute"
 
     # Testing
     TESTING: bool = False

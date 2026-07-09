@@ -35,3 +35,13 @@ class TestAliasesRateLimits:
             limit,
             headers=headers,
         )
+
+    async def test_rate_limit_for_get_aliases(
+        self,
+        http_client: AsyncClient,
+        authenticated_headers,
+        rate_limit_checker,
+    ) -> None:
+        limit = int(settings.RATE_LIMIT_ALIASES_LIST.split("/")[0])
+        headers = await authenticated_headers()
+        await rate_limit_checker(http_client, "GET", "/api/v1/aliases", limit, headers=headers)

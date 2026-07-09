@@ -90,6 +90,22 @@ class TestAliasRepository:
         assert_session_execute_called_with_select(mock_session)
         assert result == [id1, id2]
 
+    async def test_get_aliases_by_user_executes_select_and_returns_list(
+        self, mock_session: MagicMock
+    ) -> None:
+        alias1 = MagicMock()
+        alias2 = MagicMock()
+        result_mock = MagicMock()
+        result_mock.scalars.return_value.all.return_value = [alias1, alias2]
+        mock_session.execute.return_value = result_mock
+
+        repo = AliasRepository(session=mock_session)
+        target_user_id = uuid.uuid4()
+        result = await repo.get_aliases_by_user(target_user_id)
+
+        assert_session_execute_called_with_select(mock_session)
+        assert result == [alias1, alias2]
+
     async def test_delete_executes_update_and_returns_rowcount(
         self, mock_session: MagicMock
     ) -> None:
