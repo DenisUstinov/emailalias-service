@@ -43,6 +43,20 @@ class TestAliasRepository:
         assert count == 5
         assert mock_session.execute.await_count >= 1
 
+    async def test_count_non_deleted_aliases_executes_select_and_returns_scalar(
+        self, mock_session: MagicMock
+    ) -> None:
+        result_mock = MagicMock()
+        result_mock.scalar_one.return_value = 3
+        mock_session.execute.return_value = result_mock
+
+        repo = AliasRepository(session=mock_session)
+        user_id = uuid.uuid4()
+        count = await repo.count_non_deleted_aliases(user_id)
+
+        assert count == 3
+        assert_session_execute_called_with_select(mock_session)
+
     async def test_get_by_id_executes_select_and_returns_scalar(
         self, mock_session: MagicMock
     ) -> None:

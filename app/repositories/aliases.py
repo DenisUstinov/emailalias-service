@@ -30,6 +30,14 @@ class AliasRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
+    async def count_non_deleted_aliases(self, user_id: uuid.UUID) -> int:
+        stmt = select(func.count(Alias.id)).where(
+            Alias.user_id == user_id,
+            Alias.status != AliasStatus.DELETED,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one()
+
     async def get_by_id(self, alias_id: uuid.UUID) -> Alias:
         stmt = select(Alias).where(Alias.id == alias_id)
         result = await self.session.execute(stmt)

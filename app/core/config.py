@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     OTP_RATE_LIMIT_TTL_SECONDS: int = Field(default=86400, gt=0)
     ALIAS_RANDOM_LENGTH: int = Field(default=6, ge=4, le=12)
     ALIAS_FREE_TIER_MONTHLY_LIMIT: int = Field(default=10, gt=0)
+    ALIAS_FREE_TIER_ACTIVE_LIMIT: int = Field(default=10, gt=0)
     ALIAS_FREE_TIER_WINDOW_DAYS: int = Field(default=30, gt=0)
 
     @field_validator("SECRET_KEY")

@@ -27,6 +27,14 @@ class AliasMonthlyLimitExceededError(AppException):
         )
 
 
+class AliasActiveLimitExceededError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="Active alias limit exceeded for free tier",
+        )
+
+
 class AliasPremiumDomainRequiresSubscriptionError(AppException):
     def __init__(self) -> None:
         super().__init__(

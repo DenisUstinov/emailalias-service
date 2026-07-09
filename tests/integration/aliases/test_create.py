@@ -10,6 +10,7 @@ from sqlalchemy import insert, select
 from app.api.v1.endpoints import aliases
 from app.core.config import settings
 from app.core.exceptions import (
+    AliasActiveLimitExceededError,
     AliasCollisionError,
     AliasDomainNotFoundError,
     AliasMonthlyLimitExceededError,
@@ -219,6 +220,43 @@ class TestCreateAlias:
         assert data["status"] == 402
         assert isinstance(data["detail"], str)
         assert data["detail"] == AliasMonthlyLimitExceededError().detail
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["instance"], str)
+
+    async def test_business_error_active_limit_exceeded(
+        self,
+        http_client: AsyncClient,
+        db_session,
+        create_test_user,
+        create_auth_token,
+        create_test_domain,
+    ) -> None:
+        domain = await create_test_domain(fqdn="active-limit-test.com", is_default=True)
+        user = await create_test_user(password="TestP@ss123!")
+        token = await create_auth_token(user_id=user.id, role=UserRole.USER)
+        headers = {"Authorization": f"Bearer {token}"}
+
+        for i in range(settings.ALIAS_FREE_TIER_ACTIVE_LIMIT):
+            stmt = insert(Alias).values(
+                user_id=user.id,
+                domain_id=domain.id,
+                local_part=f"active{i}",
+                random_part=f"act{i:03d}",
+                status=AliasStatus.ACTIVE,
+            )
+            await db_session.execute(stmt)
+        await db_session.flush()
+
+        payload = {"domain_id": str(domain.id), "local_part": "overflow"}
+        response = await http_client.post("/api/v1/aliases", json=payload, headers=headers)
+
+        assert response.status_code == 402
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 402
+        assert isinstance(data["detail"], str)
+        assert data["detail"] == AliasActiveLimitExceededError().detail
         assert isinstance(data["type"], str)
         assert isinstance(data["title"], str)
         assert isinstance(data["instance"], str)

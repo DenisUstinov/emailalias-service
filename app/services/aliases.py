@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.config import settings
 from app.core.exceptions import (
+    AliasActiveLimitExceededError,
     AliasCollisionError,
     AliasDomainNotFoundError,
     AliasMonthlyLimitExceededError,
@@ -77,6 +78,18 @@ class AliasService:
                 },
             )
             raise AliasMonthlyLimitExceededError()
+
+        active_count = await self.alias_repo.count_non_deleted_aliases(user_id)
+        if active_count >= settings.ALIAS_FREE_TIER_ACTIVE_LIMIT:
+            logger.warning(
+                "Alias creation blocked: active limit exceeded",
+                extra={
+                    "user_id": user_id,
+                    "active_count": active_count,
+                    "limit": settings.ALIAS_FREE_TIER_ACTIVE_LIMIT,
+                },
+            )
+            raise AliasActiveLimitExceededError()
 
         random_part = self._generate_random_part()
         alias = Alias(

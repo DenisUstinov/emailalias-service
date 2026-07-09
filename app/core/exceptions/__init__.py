@@ -1,4 +1,5 @@
 from .aliases import (
+    AliasActiveLimitExceededError,
     AliasCollisionError,
     AliasDomainNotFoundError,
     AliasMonthlyLimitExceededError,
@@ -29,6 +30,7 @@ from .verifications import (
 )
 
 __all__ = [
+    "AliasActiveLimitExceededError",
     "AliasCollisionError",
     "AliasDomainNotFoundError",
     "AliasMonthlyLimitExceededError",
