@@ -14,7 +14,7 @@ from app.core.exceptions import (
     UserNotFoundError,
 )
 from app.core.security import hash_token, verify_password
-from app.models.domain import User, UserRole
+from app.models.domain import Token, User, UserRole
 from app.schemas.responses import UserUpdateResponse
 from app.schemas.verification import VerificationActionType
 from app.services import aliases as aliases_service_module
@@ -71,8 +71,11 @@ class TestUpdateUserMe:
         assert updated_user.updated_at is not None
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
         verification_exists = await redis_client.exists(token_key)
         assert verification_exists == 0
@@ -117,8 +120,11 @@ class TestUpdateUserMe:
         assert updated_user.updated_at is not None
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
         mock_group.assert_not_called()
 
@@ -180,8 +186,11 @@ class TestUpdateUserMe:
         assert updated_user.updated_at is not None
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
         verification_exists = await redis_client.exists(token_key)
         assert verification_exists == 0
@@ -218,8 +227,11 @@ class TestUpdateUserMe:
         assert isinstance(data["instance"], str)
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
     async def test_business_error_user_banned(
         self,
@@ -250,8 +262,11 @@ class TestUpdateUserMe:
         assert isinstance(data["instance"], str)
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
     @pytest.mark.parametrize(
         "invalid_email",
@@ -471,9 +486,9 @@ class TestUpdateUserMe:
     async def test_token_not_revoked_on_validation_error(
         self,
         http_client: AsyncClient,
+        db_session,
         create_test_user,
         create_auth_token,
-        redis_client,
         valid_test_password,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
@@ -481,8 +496,11 @@ class TestUpdateUserMe:
         headers = {"Authorization": f"Bearer {active_token}"}
 
         hashed = hash_token(active_token)
-        before = await redis_client.get(f"tkn:{hashed}")
-        assert before is not None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
         payload = {
             "email": "new@example.com",
@@ -491,8 +509,12 @@ class TestUpdateUserMe:
         response = await http_client.patch("/api/v1/users/me", json=payload, headers=headers)
 
         assert response.status_code == 400
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is not None
+
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
     async def test_auth_error_unauthorized(
         self,

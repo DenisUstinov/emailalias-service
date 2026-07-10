@@ -1,9 +1,10 @@
-import json
-
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.core.exceptions import InvalidCredentialsError, UserBannedError
+from app.core.security import hash_token
+from app.models.domain import Token
 
 
 @pytest.mark.anyio
@@ -12,7 +13,6 @@ class TestCreateToken:
         self,
         http_client: AsyncClient,
         db_session,
-        redis_client,
         create_test_user,
         valid_test_password,
     ) -> None:
@@ -21,24 +21,21 @@ class TestCreateToken:
         payload = {"email": user.email, "password": valid_test_password}
         response = await http_client.post("/api/v1/tokens", json=payload)
 
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
-        assert "expires_in" in data
-        assert isinstance(data["expires_in"], int)
+        assert "expires_in" not in data
 
-        user_key = f"usr:{user.id}"
-        hashed_token = await redis_client.get(user_key)
-        assert hashed_token is not None
+        stmt = select(Token).where(Token.user_id == user.id, Token.is_active)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
 
-        token_key = f"tkn:{hashed_token}"
-        token_data_json = await redis_client.get(token_key)
-        assert token_data_json is not None
+        assert token_record is not None
+        assert token_record.is_active is True
 
-        token_data = json.loads(token_data_json)
-        assert token_data["user_id"] == str(user.id)
-        assert token_data["role"] == user.role
+        expected_hash = hash_token(data["access_token"])
+        assert token_record.token_hash == expected_hash
 
     @pytest.mark.parametrize(
         "invalid_email",

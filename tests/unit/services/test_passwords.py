@@ -27,7 +27,7 @@ class TestPasswordServiceUpdatePassword:
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
-        token_service = AsyncMock()
+        token_repo = AsyncMock()
 
         user = make_user(
             user_id=test_uuids["user_1"],
@@ -39,7 +39,7 @@ class TestPasswordServiceUpdatePassword:
         service = PasswordService(
             user_repo=user_repo,
             verification_service=verification_service,
-            token_service=token_service,
+            token_repo=token_repo,
         )
 
         request = PasswordUpdateRequest(
@@ -57,7 +57,7 @@ class TestPasswordServiceUpdatePassword:
             user_id=user.id,
             password_hash="$argon2id$new",
         )
-        token_service.revoke_active_tokens.assert_awaited_once_with(user.id)
+        token_repo.revoke_all_by_user_id.assert_awaited_once_with(user.id)
 
     async def test_raises_when_contact_not_verified(
         self,
@@ -72,7 +72,7 @@ class TestPasswordServiceUpdatePassword:
         service = PasswordService(
             user_repo=user_repo,
             verification_service=verification_service,
-            token_service=AsyncMock(),
+            token_repo=AsyncMock(),
         )
 
         request = PasswordUpdateRequest(
@@ -100,7 +100,7 @@ class TestPasswordServiceUpdatePassword:
         service = PasswordService(
             user_repo=user_repo,
             verification_service=verification_service,
-            token_service=AsyncMock(),
+            token_repo=AsyncMock(),
         )
 
         request = PasswordUpdateRequest(
@@ -135,7 +135,7 @@ class TestPasswordServiceUpdatePassword:
         service = PasswordService(
             user_repo=user_repo,
             verification_service=verification_service,
-            token_service=AsyncMock(),
+            token_repo=AsyncMock(),
         )
 
         request = PasswordUpdateRequest(
@@ -149,40 +149,3 @@ class TestPasswordServiceUpdatePassword:
 
         assert_exception_details(exc_info, 403, UserBannedError)
         user_repo.update.assert_not_awaited()
-
-    async def test_success_handles_token_revocation_failure(
-        self,
-        make_user: Callable[..., User],
-        test_email: str,
-        new_valid_test_password: str,
-        test_uuids: dict[str, UUID],
-        mock_async_repository: AsyncMock,
-    ) -> None:
-        user_repo = mock_async_repository
-        verification_service = AsyncMock()
-        token_service = AsyncMock()
-        token_service.revoke_active_tokens.side_effect = Exception("Redis down")
-
-        user = make_user(
-            user_id=test_uuids["user_1"],
-            email=test_email,
-            is_banned=False,
-        )
-        user_repo.get_by_email_for_update.return_value = user
-
-        service = PasswordService(
-            user_repo=user_repo,
-            verification_service=verification_service,
-            token_service=token_service,
-        )
-
-        request = PasswordUpdateRequest(
-            email=test_email,
-            new_password=new_valid_test_password,
-            verification_token="a" * 43,
-        )
-
-        with patch("app.services.passwords.hash_password", return_value="$argon2id$new"):
-            await service.update_password(request=request)
-
-        user_repo.update.assert_awaited_once()

@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -237,6 +237,7 @@ class TestCreateAlias:
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 
+        past_date = datetime.now(UTC) - timedelta(days=60)
         for i in range(settings.ALIAS_FREE_TIER_ACTIVE_LIMIT):
             stmt = insert(Alias).values(
                 user_id=user.id,
@@ -244,6 +245,7 @@ class TestCreateAlias:
                 local_part=f"active{i}",
                 random_part=f"act{i:03d}",
                 status=AliasStatus.ACTIVE,
+                created_at=past_date,
             )
             await db_session.execute(stmt)
         await db_session.flush()

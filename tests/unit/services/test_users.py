@@ -16,13 +16,14 @@ from app.models.domain import User, UserRole
 from app.schemas.requests import UserCreateRequest
 from app.schemas.verification import VerificationActionType
 from app.services.users import UserService
+from tests.helpers import assert_exception_details
 
 
 def _make_service(**overrides: object) -> UserService:
     defaults = {
         "user_repo": AsyncMock(),
         "verification_service": AsyncMock(),
-        "token_service": AsyncMock(),
+        "token_repo": AsyncMock(),
     }
     defaults.update(overrides)
     return UserService(**defaults)
@@ -102,12 +103,12 @@ class TestUserServiceCreateUser:
             verification_token="V" * 43,
         )
 
-        with pytest.raises(UserBannedError):
+        with pytest.raises(UserBannedError) as exc_info:
             await service.create_user(request)
 
-    async def test_raises_email_already_exists_if_active_user_exists(
-        self,
-    ) -> None:
+        assert_exception_details(exc_info, 403, UserBannedError)
+
+    async def test_raises_email_already_exists_if_active_user_exists(self) -> None:
         user_repo = AsyncMock()
         active_user = User(id=uuid.uuid4(), email="test@example.com", deleted_at=None)
         user_repo.get_by_email_including_deleted_for_update.return_value = active_user
@@ -119,8 +120,10 @@ class TestUserServiceCreateUser:
             verification_token="V" * 43,
         )
 
-        with pytest.raises(EmailAlreadyExistsError):
+        with pytest.raises(EmailAlreadyExistsError) as exc_info:
             await service.create_user(request)
+
+        assert_exception_details(exc_info, 409, EmailAlreadyExistsError)
 
 
 @pytest.mark.anyio
@@ -130,11 +133,11 @@ class TestUserServiceDeleteUser:
         user = User(id=uuid.uuid4(), email="test@example.com")
         user_repo.get_by_id_for_update.return_value = user
 
-        token_service = AsyncMock()
+        token_repo = AsyncMock()
         verification_service = AsyncMock()
         service = _make_service(
             user_repo=user_repo,
-            token_service=token_service,
+            token_repo=token_repo,
             verification_service=verification_service,
         )
 
@@ -146,31 +149,32 @@ class TestUserServiceDeleteUser:
             contact="test@example.com",
             expected_action=VerificationActionType.USER_DELETION,
         )
-        token_service.revoke_active_tokens.assert_awaited_once_with(user.id)
+        token_repo.revoke_all_by_user_id.assert_awaited_once_with(user.id)
 
     async def test_revokes_tokens_if_user_not_found(self) -> None:
         user_repo = AsyncMock()
         user_repo.get_by_id_for_update.return_value = None
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
         await service.delete_user(uuid.uuid4(), "V" * 43)
 
-        token_service.revoke_active_tokens.assert_awaited_once()
+        token_repo.revoke_all_by_user_id.assert_awaited_once()
 
     async def test_raises_user_banned_on_delete(self) -> None:
         user_repo = AsyncMock()
         user = User(id=uuid.uuid4(), email="test@example.com", is_banned=True)
         user_repo.get_by_id_for_update.return_value = user
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
-        with pytest.raises(UserBannedError):
+        with pytest.raises(UserBannedError) as exc_info:
             await service.delete_user(user.id, "V" * 43)
 
-        token_service.revoke_active_tokens.assert_awaited_once_with(user.id)
+        assert_exception_details(exc_info, 403, UserBannedError)
+        token_repo.revoke_all_by_user_id.assert_awaited_once_with(user.id)
 
 
 @pytest.mark.anyio
@@ -179,30 +183,32 @@ class TestUserServiceUpdateUser:
         user_repo = AsyncMock()
         user_repo.get_by_id_for_update.return_value = None
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
-        with pytest.raises(UserNotFoundError):
+        with pytest.raises(UserNotFoundError) as exc_info:
             await service.update_user(
                 user_id=uuid.uuid4(),
                 new_password="NewP@ss123",
                 current_password="OldP@ss123",
             )
 
-        token_service.revoke_active_tokens.assert_awaited_once()
+        assert_exception_details(exc_info, 404, UserNotFoundError)
+        token_repo.revoke_all_by_user_id.assert_awaited_once()
 
     async def test_raises_user_banned(self) -> None:
         user_repo = AsyncMock()
         user = User(id=uuid.uuid4(), email="test@example.com", is_banned=True)
         user_repo.get_by_id_for_update.return_value = user
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
-        with pytest.raises(UserBannedError):
+        with pytest.raises(UserBannedError) as exc_info:
             await service.update_user(user_id=user.id)
 
-        token_service.revoke_active_tokens.assert_awaited_once()
+        assert_exception_details(exc_info, 403, UserBannedError)
+        token_repo.revoke_all_by_user_id.assert_awaited_once()
 
     async def test_raises_current_password_required(self) -> None:
         user_repo = AsyncMock()
@@ -211,8 +217,10 @@ class TestUserServiceUpdateUser:
 
         service = _make_service(user_repo=user_repo)
 
-        with pytest.raises(CurrentPasswordRequiredError):
+        with pytest.raises(CurrentPasswordRequiredError) as exc_info:
             await service.update_user(user_id=user.id, new_password="NewP@ss123")
+
+        assert_exception_details(exc_info, 400, CurrentPasswordRequiredError)
 
     async def test_raises_current_password_invalid(self) -> None:
         user_repo = AsyncMock()
@@ -223,13 +231,15 @@ class TestUserServiceUpdateUser:
 
         with (
             patch("app.services.users.verify_password", return_value=False),
-            pytest.raises(CurrentPasswordInvalidError),
+            pytest.raises(CurrentPasswordInvalidError) as exc_info,
         ):
             await service.update_user(
                 user_id=user.id,
                 new_password="NewP@ss123",
                 current_password="WrongP@ss",
             )
+
+        assert_exception_details(exc_info, 400, CurrentPasswordInvalidError)
 
     async def test_raises_email_already_exists_on_integrity_error(self) -> None:
         user_repo = AsyncMock()
@@ -241,7 +251,7 @@ class TestUserServiceUpdateUser:
 
         with (
             patch("app.services.users.verify_password", return_value=True),
-            pytest.raises(EmailAlreadyExistsError),
+            pytest.raises(EmailAlreadyExistsError) as exc_info,
         ):
             await service.update_user(
                 user_id=user.id,
@@ -249,6 +259,8 @@ class TestUserServiceUpdateUser:
                 new_password="NewP@ss123",
                 current_password="OldP@ss",
             )
+
+        assert_exception_details(exc_info, 409, EmailAlreadyExistsError)
 
     async def test_success_updates_password(self) -> None:
         user_repo = AsyncMock()
@@ -262,8 +274,8 @@ class TestUserServiceUpdateUser:
         )
         user_repo.update.return_value = updated_user
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
         with (
             patch("app.services.users.verify_password", return_value=True),
@@ -280,7 +292,7 @@ class TestUserServiceUpdateUser:
         user_repo.update.assert_awaited_once_with(
             user_id=user.id, email=None, password_hash="new_hash"
         )
-        token_service.revoke_active_tokens.assert_awaited_once_with(user.id)
+        token_repo.revoke_all_by_user_id.assert_awaited_once_with(user.id)
 
     async def test_success_updates_email_with_verification(self) -> None:
         user_repo = AsyncMock()
@@ -295,11 +307,11 @@ class TestUserServiceUpdateUser:
         user_repo.update.return_value = updated_user
 
         verification_service = AsyncMock()
-        token_service = AsyncMock()
+        token_repo = AsyncMock()
         service = _make_service(
             user_repo=user_repo,
             verification_service=verification_service,
-            token_service=token_service,
+            token_repo=token_repo,
         )
 
         result = await service.update_user(
@@ -360,13 +372,13 @@ class TestUserServiceUpdateUserAdmin:
         )
         user_repo.update.return_value = updated_user
 
-        token_service = AsyncMock()
-        service = _make_service(user_repo=user_repo, token_service=token_service)
+        token_repo = AsyncMock()
+        service = _make_service(user_repo=user_repo, token_repo=token_repo)
 
         await service.update_user_admin(user_id=user.id, is_banned=True, role=UserRole.ADMIN)
 
         user_repo.update.assert_awaited_once()
-        token_service.revoke_active_tokens.assert_awaited_once()
+        token_repo.revoke_all_by_user_id.assert_awaited_once()
 
     async def test_raises_user_not_found_if_user_missing(self) -> None:
         user_repo = AsyncMock()
@@ -374,8 +386,10 @@ class TestUserServiceUpdateUserAdmin:
 
         service = _make_service(user_repo=user_repo)
 
-        with pytest.raises(UserNotFoundError):
+        with pytest.raises(UserNotFoundError) as exc_info:
             await service.update_user_admin(user_id=uuid.uuid4())
+
+        assert_exception_details(exc_info, 404, UserNotFoundError)
 
     async def test_raises_user_not_found_on_no_result_found(self) -> None:
         user_repo = AsyncMock()
@@ -385,5 +399,7 @@ class TestUserServiceUpdateUserAdmin:
 
         service = _make_service(user_repo=user_repo)
 
-        with pytest.raises(UserNotFoundError):
+        with pytest.raises(UserNotFoundError) as exc_info:
             await service.update_user_admin(user_id=user.id)
+
+        assert_exception_details(exc_info, 404, UserNotFoundError)

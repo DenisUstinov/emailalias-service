@@ -89,3 +89,20 @@ class Alias(Base):
     @property
     def email(self) -> str:
         return f"{self.local_part}.{self.random_part}@{self.domain.fqdn}"
+
+
+class Token(Base):
+    __tablename__ = "tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    user: Mapped["User"] = relationship("User", lazy="joined")

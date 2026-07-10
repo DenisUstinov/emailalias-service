@@ -15,12 +15,13 @@ router = APIRouter()
 @router.post(
     "",
     response_model=TokenCreateResponse,
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_201_CREATED,
     summary="Create authentication token",
     description="Authenticate user with email and password to obtain an access token.",
     responses={
         200: {"description": "Token successfully created"},
         401: {"description": "Invalid credentials"},
+        403: {"description": "Account is banned"},
         422: {"description": "Validation error in request data"},
         429: {"description": "Rate limit exceeded"},
     },

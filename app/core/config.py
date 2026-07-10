@@ -85,7 +85,6 @@ class Settings(BaseSettings):
     TEST_REDIS_URL: str | None = None
 
     # Business Rules
-    TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
     VERIFICATION_TTL_SECONDS: int = Field(default=900, gt=0)
     VERIFICATION_TOKEN_TTL_SECONDS: int = Field(default=900, gt=0)
     VERIFICATION_COOLDOWN_SECONDS: int = Field(default=60, gt=0)

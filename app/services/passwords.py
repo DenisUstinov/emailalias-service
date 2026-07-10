@@ -6,10 +6,10 @@ from app.core.exceptions import (
     UserNotFoundError,
 )
 from app.core.security import hash_password
+from app.repositories.tokens import TokenRepository
 from app.repositories.users import UserRepository
 from app.schemas.requests import PasswordUpdateRequest
 from app.schemas.verification import VerificationActionType
-from app.services.tokens import TokenService
 from app.services.verifications import VerificationService
 
 logger = logging.getLogger(__name__)
@@ -20,11 +20,11 @@ class PasswordService:
         self,
         user_repo: UserRepository,
         verification_service: VerificationService,
-        token_service: TokenService,
+        token_repo: TokenRepository,
     ) -> None:
         self.user_repo = user_repo
         self.verification_service = verification_service
-        self.token_service = token_service
+        self.token_repo = token_repo
 
     async def update_password(self, request: PasswordUpdateRequest) -> None:
         await self.verification_service.verify_operation_token(
@@ -51,13 +51,7 @@ class PasswordService:
         password_hash = await asyncio.to_thread(hash_password, request.new_password)
         await self.user_repo.update(user_id=user.id, password_hash=password_hash)
 
-        try:
-            await self.token_service.revoke_active_tokens(user.id)
-        except Exception as e:
-            logger.error(
-                "Failed to execute post-commit side effects on password update",
-                extra={"email": request.email, "user_id": user.id, "error": str(e)},
-            )
+        await self.token_repo.revoke_all_by_user_id(user.id)
 
         logger.info(
             "Password successfully updated",

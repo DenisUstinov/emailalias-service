@@ -1,99 +1,66 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 import pytest
 
+from app.models.domain import Token
 from app.repositories.tokens import TokenRepository
-from app.schemas.token import TokenData
+from tests.helpers import (
+    assert_session_execute_called_with_select,
+    assert_session_execute_called_with_update,
+)
 
 
 @pytest.mark.anyio
 class TestTokenRepository:
-    async def test_create_sets_expiration(
-        self, test_uuids: dict[str, UUID], redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    async def test_create_adds_token_and_flushes(
+        self, test_uuids: dict[str, UUID], mock_session: MagicMock
     ) -> None:
-        redis_mock, pipe_mock = redis_with_pipeline
-
-        repo = TokenRepository(redis=redis_mock)
+        repo = TokenRepository(session=mock_session)
         hashed_token = "abc123"
-        data = TokenData(user_id=test_uuids["user_1"], role="user")
-        expire_seconds = 900
+        user_id = test_uuids["user_1"]
 
-        await repo.create(hashed_token, data, expire_seconds)
+        await repo.create(hashed_token=hashed_token, user_id=user_id)
 
-        pipe_mock.set.assert_any_call(
-            f"tkn:{hashed_token}", data.model_dump_json(), ex=expire_seconds
-        )
-        pipe_mock.set.assert_any_call(f"usr:{data.user_id}", hashed_token, ex=expire_seconds)
-        pipe_mock.execute.assert_awaited_once()
+        mock_session.add.assert_called_once()
+        added_token = mock_session.add.call_args[0][0]
+        assert isinstance(added_token, Token)
+        assert added_token.token_hash == hashed_token
+        assert added_token.user_id == user_id
+        mock_session.flush.assert_awaited_once()
 
-    async def test_get_returns_token_data_when_exists(self, test_uuids: dict[str, UUID]) -> None:
-        redis_mock = AsyncMock()
-        session_data = TokenData(user_id=test_uuids["user_1"], role="admin")
-        redis_mock.get.return_value = session_data.model_dump_json()
+    async def test_get_executes_select_and_filters_active(self, mock_session: MagicMock) -> None:
+        repo = TokenRepository(session=mock_session)
+        mock_session.execute = AsyncMock(return_value=MagicMock())
 
-        repo = TokenRepository(redis=redis_mock)
-        result = await repo.get("abc123")
+        await repo.get("abc123")
 
-        assert result == session_data
-        redis_mock.get.assert_awaited_once_with("tkn:abc123")
+        assert_session_execute_called_with_select(mock_session)
 
-    async def test_get_returns_none_when_missing(self) -> None:
-        redis_mock = AsyncMock()
-        redis_mock.get.return_value = None
-
-        repo = TokenRepository(redis=redis_mock)
-        result = await repo.get("unknown")
-
-        assert result is None
-        redis_mock.get.assert_awaited_once_with("tkn:unknown")
-
-    async def test_delete_removes_both_keys(
-        self, test_uuids: dict[str, UUID], redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    async def test_revoke_all_by_user_id_executes_update_and_flushes(
+        self, test_uuids: dict[str, UUID], mock_session: MagicMock
     ) -> None:
-        redis_mock, pipe_mock = redis_with_pipeline
+        repo = TokenRepository(session=mock_session)
+        user_id = test_uuids["user_1"]
 
-        session_data = TokenData(user_id=test_uuids["user_1"], role="user")
-        redis_mock.get.return_value = session_data.model_dump_json()
+        mock_result = MagicMock()
+        mock_result.rowcount = 2
+        mock_session.execute = AsyncMock(return_value=mock_result)
 
-        repo = TokenRepository(redis=redis_mock)
-        await repo.delete("abc123")
+        count = await repo.revoke_all_by_user_id(user_id)
 
-        pipe_mock.delete.assert_any_call("tkn:abc123")
-        pipe_mock.delete.assert_any_call(f"usr:{session_data.user_id}")
-        pipe_mock.execute.assert_awaited_once()
+        assert_session_execute_called_with_update(mock_session)
+        mock_session.flush.assert_awaited_once()
+        assert count == 2
 
-    async def test_delete_does_nothing_when_token_missing(
-        self, redis_with_pipeline: tuple[AsyncMock, AsyncMock]
+    async def test_touch_executes_update_and_flushes(
+        self, test_uuids: dict[str, UUID], mock_session: MagicMock
     ) -> None:
-        redis_mock, pipe_mock = redis_with_pipeline
-        redis_mock.get.return_value = None
+        repo = TokenRepository(session=mock_session)
+        token_id = test_uuids["user_1"]
+        mock_session.execute = AsyncMock()
 
-        repo = TokenRepository(redis=redis_mock)
-        await repo.delete("unknown")
+        await repo.touch(token_id)
 
-        redis_mock.get.assert_awaited_once_with("tkn:unknown")
-        pipe_mock.delete.assert_not_called()
-        pipe_mock.execute.assert_not_called()
-
-    async def test_get_hashed_token_by_user_id(self, test_uuids: dict[str, UUID]) -> None:
-        redis_mock = AsyncMock()
-        redis_mock.get.return_value = "abc123"
-
-        repo = TokenRepository(redis=redis_mock)
-        result = await repo.get_hashed_token_by_user_id(test_uuids["user_1"])
-
-        assert result == "abc123"
-        redis_mock.get.assert_awaited_once_with(f"usr:{test_uuids['user_1']}")
-
-    async def test_get_hashed_token_by_user_id_returns_none(
-        self, test_uuids: dict[str, UUID]
-    ) -> None:
-        redis_mock = AsyncMock()
-        redis_mock.get.return_value = None
-
-        repo = TokenRepository(redis=redis_mock)
-        result = await repo.get_hashed_token_by_user_id(test_uuids["user_1"])
-
-        assert result is None
-        redis_mock.get.assert_awaited_once_with(f"usr:{test_uuids['user_1']}")
+        assert_session_execute_called_with_update(mock_session)
+        mock_session.flush.assert_awaited_once()

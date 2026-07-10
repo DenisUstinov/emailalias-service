@@ -1,38 +1,36 @@
-from uuid import UUID
+import uuid
 
-from redis.asyncio import Redis
+from sqlalchemy import func, select, update
 
-from app.schemas.token import TokenData
+from app.models.domain import Token
 
 
 class TokenRepository:
-    def __init__(self, redis: Redis):
-        self.redis = redis
+    def __init__(self, session) -> None:
+        self.session = session
 
-    async def create(self, hashed_token: str, data: TokenData, expire_seconds: int) -> None:
-        hashed_token_key = f"tkn:{hashed_token}"
-        user_key = f"usr:{data.user_id}"
-        pipe = self.redis.pipeline()
-        await pipe.set(hashed_token_key, data.model_dump_json(), ex=expire_seconds)
-        await pipe.set(user_key, hashed_token, ex=expire_seconds)
-        await pipe.execute()
+    async def create(self, hashed_token: str, user_id: uuid.UUID) -> None:
+        token = Token(token_hash=hashed_token, user_id=user_id)
+        self.session.add(token)
+        await self.session.flush()
 
-    async def get(self, hashed_token: str) -> TokenData | None:
-        value = await self.redis.get(f"tkn:{hashed_token}")
-        if value is None:
-            return None
-        return TokenData.model_validate_json(value)
+    async def get(self, hashed_token: str) -> Token | None:
+        stmt = select(Token).where(
+            Token.token_hash == hashed_token,
+            Token.is_active,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
-    async def delete(self, hashed_token: str) -> None:
-        hashed_token_key = f"tkn:{hashed_token}"
-        value = await self.redis.get(hashed_token_key)
-        if value:
-            data = TokenData.model_validate_json(value)
-            user_key = f"usr:{data.user_id}"
-            pipe = self.redis.pipeline()
-            await pipe.delete(hashed_token_key)
-            await pipe.delete(user_key)
-            await pipe.execute()
+    async def revoke_all_by_user_id(self, user_id: uuid.UUID) -> int:
+        stmt = (
+            update(Token).where(Token.user_id == user_id, Token.is_active).values(is_active=False)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.flush()
+        return result.rowcount
 
-    async def get_hashed_token_by_user_id(self, user_id: UUID) -> str | None:
-        return await self.redis.get(f"usr:{user_id}")
+    async def touch(self, token_id: uuid.UUID) -> None:
+        stmt = update(Token).where(Token.id == token_id).values(last_used_at=func.now())
+        await self.session.execute(stmt)
+        await self.session.flush()

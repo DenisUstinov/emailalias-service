@@ -13,11 +13,11 @@ from app.core.exceptions import (
 )
 from app.core.security import hash_password, verify_password
 from app.models.domain import User, UserRole
+from app.repositories.tokens import TokenRepository
 from app.repositories.users import UserRepository
 from app.schemas.requests import UserCreateRequest
 from app.schemas.responses import UserAdminUpdateResponse, UserCreateResponse, UserUpdateResponse
 from app.schemas.verification import VerificationActionType
-from app.services.tokens import TokenService
 from app.services.verifications import VerificationService
 
 logger = logging.getLogger(__name__)
@@ -28,11 +28,11 @@ class UserService:
         self,
         user_repo: UserRepository,
         verification_service: VerificationService,
-        token_service: TokenService,
+        token_repo: TokenRepository,
     ) -> None:
         self.user_repo = user_repo
         self.verification_service = verification_service
-        self.token_service = token_service
+        self.token_repo = token_repo
 
     async def _get_active_user(self, user_id: uuid.UUID) -> User | None:
         user = await self.user_repo.get_by_id_for_update(user_id)
@@ -43,13 +43,7 @@ class UserService:
                 "Operation attempt by banned user with active session",
                 extra={"user_id": user_id},
             )
-            try:
-                await self.token_service.revoke_active_tokens(user_id)
-            except Exception as e:
-                logger.error(
-                    "Failed to revoke tokens for banned user",
-                    extra={"user_id": user_id, "error": str(e)},
-                )
+            await self.token_repo.revoke_all_by_user_id(user_id)
             raise UserBannedError()
         return user
 
@@ -116,13 +110,7 @@ class UserService:
                 extra={"user_id": user_id},
             )
 
-        try:
-            await self.token_service.revoke_active_tokens(user_id)
-        except Exception as e:
-            logger.error(
-                "Failed to revoke active tokens during user deletion",
-                extra={"user_id": user_id, "error": str(e)},
-            )
+        await self.token_repo.revoke_all_by_user_id(user_id)
 
     async def update_user(
         self,
@@ -138,13 +126,7 @@ class UserService:
                 "Update attempt for non-existent user with active session",
                 extra={"user_id": user_id},
             )
-            try:
-                await self.token_service.revoke_active_tokens(user_id)
-            except Exception as e:
-                logger.error(
-                    "Failed to revoke tokens for non-existent user",
-                    extra={"user_id": user_id, "error": str(e)},
-                )
+            await self.token_repo.revoke_all_by_user_id(user_id)
             raise UserNotFoundError()
 
         if new_password is not None:
@@ -186,13 +168,7 @@ class UserService:
             )
             raise EmailAlreadyExistsError() from None
 
-        try:
-            await self.token_service.revoke_active_tokens(user_id)
-        except Exception as e:
-            logger.error(
-                "Failed to execute post-flush side effects on user update",
-                extra={"user_id": user_id, "error": str(e)},
-            )
+        await self.token_repo.revoke_all_by_user_id(user_id)
 
         logger.info(
             "User successfully updated",
@@ -227,13 +203,7 @@ class UserService:
             )
             raise UserNotFoundError() from None
 
-        try:
-            await self.token_service.revoke_active_tokens(user_id)
-        except Exception as e:
-            logger.error(
-                "Failed to execute post-flush side effects on admin user update",
-                extra={"user_id": user_id, "error": str(e)},
-            )
+        await self.token_repo.revoke_all_by_user_id(user_id)
 
         logger.info(
             "User successfully updated by admin",

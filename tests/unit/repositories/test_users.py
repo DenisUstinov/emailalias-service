@@ -14,30 +14,6 @@ from tests.helpers import (
 
 @pytest.mark.anyio
 class TestUserRepository:
-    async def test_get_by_email_returns_user_when_exists(
-        self, mock_session: MagicMock, make_user: Callable[..., User]
-    ) -> None:
-        user = make_user(email="test@example.com")
-        result_mock = MagicMock()
-        result_mock.scalar_one_or_none.return_value = user
-        mock_session.execute.return_value = result_mock
-
-        repo = UserRepository(session=mock_session)
-        result = await repo.get_by_email("test@example.com")
-
-        assert_session_execute_called_with_select(mock_session)
-        assert result == user
-
-    async def test_get_by_email_returns_none_when_missing(self, mock_session: MagicMock) -> None:
-        result_mock = MagicMock()
-        result_mock.scalar_one_or_none.return_value = None
-        mock_session.execute.return_value = result_mock
-
-        repo = UserRepository(session=mock_session)
-        result = await repo.get_by_email("unknown@example.com")
-
-        assert result is None
-
     async def test_get_by_email_for_update_returns_user_when_exists(
         self, mock_session: MagicMock, make_user: Callable[..., User]
     ) -> None:

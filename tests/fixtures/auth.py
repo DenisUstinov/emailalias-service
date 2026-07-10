@@ -1,6 +1,6 @@
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from argon2 import PasswordHasher
@@ -16,7 +16,6 @@ from app.main import app
 from app.models.domain import User, UserRole
 from app.repositories.tokens import TokenRepository
 from app.schemas.common import SecurePassword
-from app.schemas.token import TokenData
 from app.schemas.verification import VerificationActionType, VerificationTokenData
 
 _secure_password_validator = TypeAdapter(SecurePassword)
@@ -122,15 +121,13 @@ async def create_auth_token(
     db_session: AsyncSession,
     token_repository: TokenRepository,
 ) -> Callable[..., Awaitable[str]]:
-    async def _create(user_id: uuid.UUID, role: UserRole, ttl_seconds: int = 3600) -> str:
+    async def _create(user_id: uuid.UUID, role: UserRole = UserRole.USER) -> str:
         token = uuid.uuid4().hex
         hashed = hash_token(token)
-        expires_at = datetime.now(UTC) + timedelta(seconds=ttl_seconds)
 
         await token_repository.create(
             hashed_token=hashed,
-            data=TokenData(user_id=user_id, role=role, expires_at=expires_at),
-            expire_seconds=ttl_seconds,
+            user_id=user_id,
         )
         return token
 

@@ -146,7 +146,7 @@ async def override_dependencies(
         yield redis_client
 
     def mock_get_token_repository() -> TokenRepository:
-        return TokenRepository(redis=redis_client)
+        return TokenRepository(session=db_session)
 
     app.dependency_overrides[get_db] = mock_get_db
     app.dependency_overrides[get_redis] = mock_get_redis

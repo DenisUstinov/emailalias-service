@@ -67,14 +67,12 @@ class DomainResponse(BaseModel):
 class TokenCreateResponse(BaseModel):
     access_token: str = Field(..., description="Opaque session token")
     token_type: str = Field(default="bearer", description="Token type")
-    expires_in: int = Field(..., description="Token lifetime in seconds")
 
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
                 "access_token": "randomly_generated_string_here",
                 "token_type": "bearer",
-                "expires_in": 900,
             }
         }
     )
@@ -90,7 +88,7 @@ class UserAdminUpdateResponse(BaseModel):
         json_schema_extra={
             "example": {
                 "is_banned": True,
-                "role": "provider",
+                "role": "user",
                 "updated_at": "2026-05-20T15:30:00Z",
             }
         },

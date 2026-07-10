@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.core.exceptions import ContactNotVerifiedError, UserBannedError
 from app.core.security import hash_token
-from app.models.domain import User, UserRole
+from app.models.domain import Token, User, UserRole
 from app.schemas.verification import VerificationActionType
 
 
@@ -34,8 +34,11 @@ class TestDeleteUserMe:
         )
 
         hashed = hash_token(active_token)
-        before_delete = await redis_client.get(f"tkn:{hashed}")
-        assert before_delete is not None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
         override_current_user_id(user.id)
 
@@ -54,8 +57,11 @@ class TestDeleteUserMe:
         assert deleted_user is not None
         assert deleted_user.deleted_at is not None
 
-        after_delete = await redis_client.get(f"tkn:{hashed}")
-        assert after_delete is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
         after_verification = await redis_client.get(token_key)
         assert after_verification is None
@@ -132,8 +138,11 @@ class TestDeleteUserMe:
         assert existing_user.deleted_at is None
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is not None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
     async def test_business_error_user_banned(
         self,
@@ -150,8 +159,11 @@ class TestDeleteUserMe:
         headers = {"Authorization": f"Bearer {active_token}"}
 
         hashed = hash_token(active_token)
-        before_attempt = await redis_client.get(f"tkn:{hashed}")
-        assert before_attempt is not None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
         override_current_user_id(user.id)
 
@@ -172,8 +184,11 @@ class TestDeleteUserMe:
         assert data["detail"] == UserBannedError().detail
         assert isinstance(data["instance"], str)
 
-        after_attempt = await redis_client.get(f"tkn:{hashed}")
-        assert after_attempt is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
         result = await db_session.execute(select(User).where(User.id == user.id))
         banned_user = result.scalar_one_or_none()
@@ -209,6 +224,7 @@ class TestDeleteUserMe:
     async def test_idempotency_second_call_returns_204(
         self,
         http_client: AsyncClient,
+        db_session,
         create_test_user,
         create_auth_token,
         create_verification_token,
@@ -246,8 +262,11 @@ class TestDeleteUserMe:
         assert second_response.status_code == 204
 
         hashed = hash_token(active_token)
-        revoked = await redis_client.get(f"tkn:{hashed}")
-        assert revoked is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
 
     async def test_ghost_token_cleanup_when_user_already_deleted(
         self,
@@ -264,8 +283,11 @@ class TestDeleteUserMe:
         headers = {"Authorization": f"Bearer {active_token}"}
 
         hashed = hash_token(active_token)
-        before_attempt = await redis_client.get(f"tkn:{hashed}")
-        assert before_attempt is not None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is True
 
         override_current_user_id(user.id)
 
@@ -281,5 +303,8 @@ class TestDeleteUserMe:
         assert response.status_code == 204
         assert response.content == b""
 
-        after_attempt = await redis_client.get(f"tkn:{hashed}")
-        assert after_attempt is None
+        stmt = select(Token).where(Token.token_hash == hashed)
+        result = await db_session.execute(stmt)
+        token_record = result.scalar_one_or_none()
+        assert token_record is not None
+        assert token_record.is_active is False
