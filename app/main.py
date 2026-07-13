@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from redis.asyncio import ConnectionPool, Redis
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.v1.router import api_v1_router
 from app.core.config import settings
@@ -107,7 +108,6 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 
@@ -235,3 +235,6 @@ def _get_title_for_status(status_code: int) -> str:
         504: "Gateway Timeout",
     }
     return titles.get(status_code, "Error")
+
+
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
