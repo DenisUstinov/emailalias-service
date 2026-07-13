@@ -1,15 +1,20 @@
 name: CD
+run-name: ${{ github.event.workflow_run.head_commit.message }}
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: self-hosted
-    environment: production
+    environment: staging
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     timeout-minutes: 15
 
     defaults:
@@ -18,21 +23,23 @@ jobs:
         working-directory: ${{ github.workspace }}
 
     env:
-      COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
-      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-      SERVICE_DESCRIPTION: ${{ vars.SERVICE_DESCRIPTION }}
-      PORT: ${{ vars.PORT }}
       BACKEND_CORS_ORIGINS: ${{ vars.BACKEND_CORS_ORIGINS }}
+      BEGET_LOGIN: ${{ secrets.BEGET_LOGIN }}
+      BEGET_PASSWORD: ${{ secrets.BEGET_PASSWORD }}
+      COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
+      PORT: ${{ vars.PORT }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
-      POSTGRES_USER: ${{ vars.POSTGRES_USER }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-      REDIS_URL: ${{ vars.REDIS_URL }}
+      POSTGRES_USER: ${{ vars.POSTGRES_USER }}
       RABBITMQ_HOST: ${{ vars.RABBITMQ_HOST }}
-      RABBITMQ_VHOST: ${{ vars.RABBITMQ_VHOST }}
-      RABBITMQ_USER: ${{ vars.RABBITMQ_USER }}
       RABBITMQ_PASSWORD: ${{ secrets.RABBITMQ_PASSWORD }}
+      RABBITMQ_USER: ${{ vars.RABBITMQ_USER }}
+      RABBITMQ_VHOST: ${{ vars.RABBITMQ_VHOST }}
+      REDIS_URL: ${{ vars.REDIS_URL }}
       SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      SERVICE_DESCRIPTION: ${{ vars.SERVICE_DESCRIPTION }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
 
     steps:
       - name: Checkout code

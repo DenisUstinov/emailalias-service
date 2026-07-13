@@ -13,20 +13,21 @@ services:
       retries: 3
       start_period: 30s
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - SERVICE_NAME=${SERVICE_NAME}
-      - SERVICE_DESCRIPTION=${SERVICE_DESCRIPTION}
       - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - REDIS_URL=${REDIS_URL}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_USER=${RABBITMQ_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
       - BEGET_LOGIN=${BEGET_LOGIN}
       - BEGET_PASSWORD=${BEGET_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - SERVICE_DESCRIPTION=${SERVICE_DESCRIPTION}
+      - SERVICE_NAME=${SERVICE_NAME}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -48,26 +49,28 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  celery-worker:
+  worker:
     build:
       context: .
       dockerfile: Dockerfile
       target: runtime
     command: ["celery", "-A", "app.infrastructure.celery.app", "worker", "--loglevel=info"]
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - SERVICE_NAME=${SERVICE_NAME}
-      - SERVICE_DESCRIPTION=${SERVICE_DESCRIPTION}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - POSTGRES_HOST=${POSTGRES_HOST}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - REDIS_URL=${REDIS_URL}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_USER=${RABBITMQ_USER}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
       - BEGET_LOGIN=${BEGET_LOGIN}
       - BEGET_PASSWORD=${BEGET_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_HOST=${POSTGRES_HOST}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_VHOST=${RABBITMQ_VHOST}
+      - REDIS_URL=${REDIS_URL}
+      - SECRET_KEY=${SECRET_KEY}
+      - SERVICE_DESCRIPTION=${SERVICE_DESCRIPTION}
+      - SERVICE_NAME=${SERVICE_NAME}
     restart: unless-stopped
     depends_on:
       postgres:

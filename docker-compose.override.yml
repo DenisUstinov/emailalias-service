@@ -11,7 +11,7 @@ services:
     env_file:
       - .env
 
-  celery-worker:
+  worker:
     build:
       target: development
     command: ["celery", "-A", "app.infrastructure.celery.app", "worker", "--loglevel=info", "--pool=solo"]
