@@ -54,7 +54,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-Instrumentator().instrument(app).expose(app, endpoint="/metrics")
+Instrumentator().instrument(app).expose(
+    app, endpoint="/metrics", include_in_schema=False, should_gzip=True
+)
 
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
