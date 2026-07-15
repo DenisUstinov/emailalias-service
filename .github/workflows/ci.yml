@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - temp/**
   workflow_dispatch:
 
 jobs:
@@ -40,7 +39,7 @@ jobs:
         run: uv run pre-commit run --all-files
 
       - name: Build and start services
-        run: docker compose up -d --build --wait
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --wait
 
       - name: Coverage
-        run: docker compose exec -e TESTING=true api uv run pytest -v --cov=app --cov-report=term-missing -p no:xdist
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml exec -e TESTING=true api uv run pytest -v --cov=app --cov-report=term-missing -p no:xdist

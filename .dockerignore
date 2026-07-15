@@ -1,5 +1,40 @@
-.venv
-__pycache__
-.pytest_cache
-*.pyc
+# Version control
+.git
+.gitignore
+
+# Environment variables
 .env
+.env.*
+
+# Documentation and licensing
+README.md
+LICENSE
+docs/
+
+# CI/CD and development tools
+.github/
+.pre-commit-config.yaml
+.python-version
+Makefile
+
+# Testing (не нужны в runtime-образе)
+tests/
+
+# Load testing (пробрасываются через volume в stage)
+loadtests/
+
+# Infrastructure configuration (пробрасываются через volume)
+nginx/
+monitoring/
+docker-compose.yml
+docker-compose.dev.yml
+docker-compose.stage.yml
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/

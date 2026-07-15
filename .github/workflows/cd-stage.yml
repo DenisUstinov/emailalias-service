@@ -1,4 +1,4 @@
-name: CD
+name: "CD: Stage"
 run-name: ${{ github.event.workflow_run.head_commit.message }}
 
 on:
@@ -46,10 +46,10 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Stop previous stack
-        run: docker compose -f docker-compose.yml down || true
+        run: docker compose -f docker-compose.yml -f docker-compose.stage.yml down || true
 
       - name: Deploy stack
-        run: docker compose -f docker-compose.yml up -d --build --wait
+        run: docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d --build --wait
 
       - name: Run database migrations
-        run: docker compose -f docker-compose.yml exec -T api alembic upgrade head
+        run: docker compose -f docker-compose.yml -f docker-compose.stage.yml exec -T api alembic upgrade head

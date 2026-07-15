@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from redis.asyncio import ConnectionPool, Redis
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -52,6 +53,8 @@ app = FastAPI(
     debug=settings.DEBUG,
     lifespan=lifespan,
 )
+
+Instrumentator().instrument(app).expose(app, endpoint="/metrics")
 
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(

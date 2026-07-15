@@ -1,4 +1,4 @@
-COMPOSE := docker compose
+COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
 .PHONY: all clean up down restart test test-path test-cov lint check migrate migrate-new nuke
 
