@@ -7,10 +7,13 @@ from .aliases import (
 )
 from .base import AppException
 from .common import (
-    AuthenticationRequiredError,
     ExternalProviderRejectionError,
     ExternalProviderUnavailableError,
+)
+from .tokens import (
     InvalidCredentialsError,
+    TokenMissingError,
+    TokenPasswordAttemptsBlockedError,
 )
 from .users import (
     CurrentPasswordInvalidError,
@@ -36,14 +39,15 @@ __all__ = [
     "AliasMonthlyLimitExceededError",
     "AliasPremiumDomainRequiresSubscriptionError",
     "AppException",
-    "AuthenticationRequiredError",
+    "ContactNotVerifiedError",
     "CurrentPasswordInvalidError",
     "CurrentPasswordRequiredError",
     "EmailAlreadyExistsError",
     "ExternalProviderRejectionError",
     "ExternalProviderUnavailableError",
-    "ContactNotVerifiedError",
     "InvalidCredentialsError",
+    "TokenMissingError",
+    "TokenPasswordAttemptsBlockedError",
     "UserBannedError",
     "UserNotFoundError",
     "VerificationAttemptsLimitExceededError",

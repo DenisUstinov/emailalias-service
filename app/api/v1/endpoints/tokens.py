@@ -19,11 +19,13 @@ router = APIRouter()
     summary="Create authentication token",
     description="Authenticate user with email and password to obtain an access token.",
     responses={
-        200: {"description": "Token successfully created"},
-        401: {"description": "Invalid credentials"},
+        201: {"description": "Authentication token successfully created"},
+        401: {"description": "Invalid email or password"},
         403: {"description": "Account is banned"},
         422: {"description": "Validation error in request data"},
+        423: {"description": "Password attempts temporarily blocked"},
         429: {"description": "Rate limit exceeded"},
+        503: {"description": "Service temporarily unavailable"},
     },
 )
 @limiter.limit(settings.RATE_LIMIT_TOKEN_CREATION)

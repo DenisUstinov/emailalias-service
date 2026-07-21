@@ -7,7 +7,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import AppException, AuthenticationRequiredError
+from app.core.exceptions import AppException, TokenMissingError
 from app.core.notifications import OTPSender
 from app.core.security import hash_token
 from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
@@ -16,7 +16,7 @@ from app.models.database import AsyncSessionLocal
 from app.models.domain import UserRole
 from app.repositories.aliases import AliasRepository
 from app.repositories.domains import DomainRepository
-from app.repositories.tokens import TokenRepository
+from app.repositories.tokens import PasswordAttemptSessionRepository, TokenRepository
 from app.repositories.users import UserRepository
 from app.repositories.verification import VerificationRepository
 from app.services.aliases import AliasService
@@ -85,10 +85,16 @@ def get_password_service(
 
 def get_token_service(
     db: Annotated[AsyncSession, Depends(get_db)],
+    redis_client: Annotated[Redis, Depends(get_redis)],
 ) -> TokenService:
     user_repo = UserRepository(session=db)
     token_repo = TokenRepository(session=db)
-    return TokenService(user_repo=user_repo, token_repo=token_repo)
+    password_attempt_repo = PasswordAttemptSessionRepository(redis=redis_client)
+    return TokenService(
+        user_repo=user_repo,
+        token_repo=token_repo,
+        password_attempt_repo=password_attempt_repo,
+    )
 
 
 def get_otp_sender() -> OTPSender:
@@ -143,7 +149,7 @@ async def _get_current_user_with_role(
     token = await token_repo.get(hashed_token)
 
     if not token:
-        raise AuthenticationRequiredError()
+        raise TokenMissingError()
 
     if token.user.role != required_role:
         raise AppException(

@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: all clean up down restart test test-path test-cov lint check migrate migrate-new nuke
+.PHONY: all clean up down restart logs test test-path test-cov lint check migrate migrate-new nuke
 
 all: up
 
@@ -14,6 +14,9 @@ down:
 
 restart:
 	$(COMPOSE) restart api
+
+logs:
+	$(COMPOSE) logs -f
 
 test:
 	$(COMPOSE) exec -e TESTING=true api uv run pytest -v -p no:xdist

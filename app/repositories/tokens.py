@@ -1,8 +1,10 @@
 import uuid
 
+from redis.asyncio import Redis
 from sqlalchemy import func, select, update
 
 from app.models.domain import Token
+from app.schemas.tokens import PasswordAttemptSessionData
 
 
 class TokenRepository:
@@ -34,3 +36,25 @@ class TokenRepository:
         stmt = update(Token).where(Token.id == token_id).values(last_used_at=func.now())
         await self.session.execute(stmt)
         await self.session.flush()
+
+
+class PasswordAttemptSessionRepository:
+    def __init__(self, redis: Redis) -> None:
+        self.redis = redis
+
+    async def get_session(self, email_hash: str) -> PasswordAttemptSessionData | None:
+        key = f"password_attempts:{email_hash}"
+        value = await self.redis.get(key)
+        if value is None:
+            return None
+        return PasswordAttemptSessionData.model_validate_json(value)
+
+    async def save_session(
+        self, email_hash: str, data: PasswordAttemptSessionData, expire_seconds: int
+    ) -> None:
+        key = f"password_attempts:{email_hash}"
+        await self.redis.set(key, data.model_dump_json(), ex=expire_seconds)
+
+    async def delete_session(self, email_hash: str) -> None:
+        key = f"password_attempts:{email_hash}"
+        await self.redis.delete(key)
