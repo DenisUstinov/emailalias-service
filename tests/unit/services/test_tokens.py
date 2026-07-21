@@ -67,6 +67,7 @@ class TestTokenServiceCreateToken:
         self,
         valid_test_password: str,
         mock_async_repository: AsyncMock,
+        generate_test_email,
     ) -> None:
         user_repo = mock_async_repository
         token_repo = AsyncMock()
@@ -74,6 +75,7 @@ class TestTokenServiceCreateToken:
         password_attempt_repo.get_session.return_value = None
 
         user_repo.get_by_email_for_update.return_value = None
+        unknown_email = generate_test_email(prefix="unknown")
 
         service = TokenService(
             user_repo=user_repo,
@@ -83,12 +85,12 @@ class TestTokenServiceCreateToken:
 
         with pytest.raises(InvalidCredentialsError) as exc_info:
             await service.create_token(
-                email="unknown@example.com",
+                email=unknown_email,
                 password=valid_test_password,
             )
 
         assert_exception_details(exc_info, 401, InvalidCredentialsError)
-        user_repo.get_by_email_for_update.assert_awaited_once_with("unknown@example.com")
+        user_repo.get_by_email_for_update.assert_awaited_once_with(unknown_email)
         token_repo.revoke_all_by_user_id.assert_not_awaited()
         password_attempt_repo.get_session.assert_awaited_once()
         password_attempt_repo.save_session.assert_not_awaited()

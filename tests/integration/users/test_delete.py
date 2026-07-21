@@ -18,19 +18,19 @@ class TestDeleteUserMe:
         create_auth_token,
         create_verification_token,
         redis_client,
-        valid_test_password,
+        valid_test_password: str,
         override_current_user_id,
+        dummy_verification_token: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {active_token}"}
 
-        raw_token = "D9eL2kP5nQ8vM1wR4tY7uZ0sA3bC6dE9gH2jN5pM8xW"
-        token_key = f"vtoken:{hash_token(raw_token)}"
+        token_key = f"vtoken:{hash_token(dummy_verification_token)}"
         await create_verification_token(
             email=user.email,
             action_type=VerificationActionType.USER_DELETION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
         hashed = hash_token(active_token)
@@ -45,7 +45,7 @@ class TestDeleteUserMe:
         response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": raw_token},
+            json={"verification_token": dummy_verification_token},
             headers=headers,
         )
 
@@ -106,8 +106,9 @@ class TestDeleteUserMe:
         create_test_user,
         create_auth_token,
         redis_client,
-        valid_test_password,
+        valid_test_password: str,
         override_current_user_id,
+        invalid_verification_token: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
@@ -118,7 +119,7 @@ class TestDeleteUserMe:
         response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": "invalid_token_not_in_redis_1234567890123456"},
+            json={"verification_token": invalid_verification_token},
             headers=headers,
         )
 
@@ -151,8 +152,9 @@ class TestDeleteUserMe:
         create_test_user,
         create_auth_token,
         redis_client,
-        valid_test_password,
+        valid_test_password: str,
         override_current_user_id,
+        invalid_verification_token: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password, is_banned=True)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
@@ -170,7 +172,7 @@ class TestDeleteUserMe:
         response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": "invalid_token_not_in_redis_1234567890123456"},
+            json={"verification_token": invalid_verification_token},
             headers=headers,
         )
 
@@ -201,7 +203,7 @@ class TestDeleteUserMe:
         http_client: AsyncClient,
         db_session,
         create_test_user,
-        valid_test_password,
+        valid_test_password: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
 
@@ -229,18 +231,18 @@ class TestDeleteUserMe:
         create_auth_token,
         create_verification_token,
         redis_client,
-        valid_test_password,
+        valid_test_password: str,
         override_current_user_id,
+        dummy_verification_token: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {active_token}"}
 
-        raw_token = "1d3mp0t3ncyT0k3nF0rT3st1ngPurp0s3s0n1y12345"
         await create_verification_token(
             email=user.email,
             action_type=VerificationActionType.USER_DELETION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
         override_current_user_id(user.id)
@@ -248,7 +250,7 @@ class TestDeleteUserMe:
         first_response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": raw_token},
+            json={"verification_token": dummy_verification_token},
             headers=headers,
         )
         assert first_response.status_code == 204
@@ -256,7 +258,7 @@ class TestDeleteUserMe:
         second_response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": raw_token},
+            json={"verification_token": dummy_verification_token},
             headers=headers,
         )
         assert second_response.status_code == 204
@@ -275,8 +277,9 @@ class TestDeleteUserMe:
         create_test_user,
         create_auth_token,
         redis_client,
-        valid_test_password,
+        valid_test_password: str,
         override_current_user_id,
+        dummy_verification_token: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password, is_deleted=True)
         active_token = await create_auth_token(user_id=user.id, role=UserRole.USER)
@@ -291,12 +294,10 @@ class TestDeleteUserMe:
 
         override_current_user_id(user.id)
 
-        verification_token = "a" * 43
-
         response = await http_client.request(
             "DELETE",
             "/api/v1/users/me",
-            json={"verification_token": verification_token},
+            json={"verification_token": dummy_verification_token},
             headers=headers,
         )
 

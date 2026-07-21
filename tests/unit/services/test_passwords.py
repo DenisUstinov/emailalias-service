@@ -24,11 +24,11 @@ class TestPasswordServiceUpdatePassword:
         new_valid_test_password: str,
         test_uuids: dict[str, UUID],
         mock_async_repository: AsyncMock,
+        dummy_verification_token: str,
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
         token_repo = AsyncMock()
-
         user = make_user(
             user_id=test_uuids["user_1"],
             email=test_email,
@@ -45,7 +45,7 @@ class TestPasswordServiceUpdatePassword:
         request = PasswordUpdateRequest(
             email=test_email,
             new_password=new_valid_test_password,
-            verification_token="a" * 43,
+            verification_token=dummy_verification_token,
         )
 
         with patch("app.services.passwords.hash_password", return_value="$argon2id$new"):
@@ -64,6 +64,7 @@ class TestPasswordServiceUpdatePassword:
         test_email: str,
         new_valid_test_password: str,
         mock_async_repository: AsyncMock,
+        dummy_verification_token: str,
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
@@ -78,7 +79,7 @@ class TestPasswordServiceUpdatePassword:
         request = PasswordUpdateRequest(
             email=test_email,
             new_password=new_valid_test_password,
-            verification_token="a" * 43,
+            verification_token=dummy_verification_token,
         )
 
         with pytest.raises(ContactNotVerifiedError) as exc_info:
@@ -92,6 +93,7 @@ class TestPasswordServiceUpdatePassword:
         test_email: str,
         new_valid_test_password: str,
         mock_async_repository: AsyncMock,
+        dummy_verification_token: str,
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
@@ -106,7 +108,7 @@ class TestPasswordServiceUpdatePassword:
         request = PasswordUpdateRequest(
             email=test_email,
             new_password=new_valid_test_password,
-            verification_token="a" * 43,
+            verification_token=dummy_verification_token,
         )
 
         with pytest.raises(UserNotFoundError) as exc_info:
@@ -121,10 +123,10 @@ class TestPasswordServiceUpdatePassword:
         new_valid_test_password: str,
         test_uuids: dict[str, UUID],
         mock_async_repository: AsyncMock,
+        dummy_verification_token: str,
     ) -> None:
         user_repo = mock_async_repository
         verification_service = AsyncMock()
-
         user = make_user(
             user_id=test_uuids["user_1"],
             email=test_email,
@@ -141,7 +143,7 @@ class TestPasswordServiceUpdatePassword:
         request = PasswordUpdateRequest(
             email=test_email,
             new_password=new_valid_test_password,
-            verification_token="a" * 43,
+            verification_token=dummy_verification_token,
         )
 
         with pytest.raises(UserBannedError) as exc_info:

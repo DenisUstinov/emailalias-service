@@ -1,3 +1,4 @@
+import uuid
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,6 +23,7 @@ class TestCreateVerification:
         redis_client,
         faker: Faker,
         monkeypatch,
+        dummy_otp_code: str,
     ) -> None:
         from app.api.v1.endpoints import verifications
 
@@ -69,6 +71,7 @@ class TestCreateVerification:
         faker: Faker,
         create_verification_session,
         monkeypatch,
+        dummy_otp_code: str,
     ) -> None:
         from app.api.v1.endpoints import verifications
 
@@ -76,10 +79,10 @@ class TestCreateVerification:
         monkeypatch.setattr(verifications, "send_otp_task", mock_task)
 
         email = faker.email().lower()
-        verification_id = "11111111-1111-1111-1111-111111111111"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.PASSWORD_RESET
 
-        await create_verification_session(email, verification_id, action_type, "123456")
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
         ttl_after_cooldown = (
             settings.VERIFICATION_TTL_SECONDS - settings.VERIFICATION_COOLDOWN_SECONDS - 1
@@ -101,7 +104,7 @@ class TestCreateVerification:
         updated_session = VerificationSessionData.model_validate_json(stored_session)
         assert updated_session.request_count == 2
         assert updated_session.check_attempts == 0
-        assert updated_session.otp != "123456"
+        assert updated_session.otp != dummy_otp_code
 
         mock_task.apply_async.assert_called_once()
         call_args = mock_task.apply_async.call_args
@@ -115,6 +118,7 @@ class TestCreateVerification:
         faker: Faker,
         create_verification_session,
         monkeypatch,
+        dummy_otp_code: str,
     ) -> None:
         from app.api.v1.endpoints import verifications
 
@@ -122,14 +126,14 @@ class TestCreateVerification:
         monkeypatch.setattr(verifications, "send_otp_task", mock_task)
 
         email = faker.email().lower()
-        old_verification_id = "22222222-2222-2222-2222-222222222222"
+        old_verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.EMAIL_CHANGE
 
         await create_verification_session(
             email,
             old_verification_id,
             action_type,
-            "654321",
+            dummy_otp_code,
             request_count=3,
             check_attempts=1,
             ttl=1,
@@ -152,7 +156,7 @@ class TestCreateVerification:
         stored_session = await redis_client.get(new_session_key)
         new_session = VerificationSessionData.model_validate_json(stored_session)
         assert new_session.request_count == 1
-        assert new_session.otp != "654321"
+        assert new_session.otp != dummy_otp_code
         assert new_session.check_attempts == 0
 
         mock_task.apply_async.assert_called_once()
@@ -192,11 +196,12 @@ class TestCreateVerification:
         redis_client,
         faker: Faker,
         create_verification_session,
+        dummy_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "33333333-3333-3333-3333-333333333333"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.USER_DELETION
-        await create_verification_session(email, verification_id, action_type, "111222")
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
         ttl_during_cooldown = settings.VERIFICATION_TTL_SECONDS - 10
         session_key = f"verification:{verification_id}"
@@ -248,6 +253,7 @@ class TestCreateVerification:
         redis_client,
         faker: Faker,
         monkeypatch,
+        dummy_otp_code: str,
     ) -> None:
         from app.api.v1.endpoints import verifications
 

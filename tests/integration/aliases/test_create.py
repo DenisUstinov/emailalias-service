@@ -66,9 +66,10 @@ class TestCreateAlias:
         create_test_user,
         authenticated_headers,
         monkeypatch,
+        valid_test_password: str,
     ) -> None:
         domain = await create_test_domain(fqdn="collision-test.com", is_default=True)
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         headers = await authenticated_headers()
 
         stmt = insert(Alias).values(
@@ -193,9 +194,10 @@ class TestCreateAlias:
         create_test_user,
         create_auth_token,
         create_test_domain,
+        valid_test_password: str,
     ) -> None:
         domain = await create_test_domain(fqdn="limit-test.com", is_default=True)
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -231,9 +233,10 @@ class TestCreateAlias:
         create_test_user,
         create_auth_token,
         create_test_domain,
+        valid_test_password: str,
     ) -> None:
         domain = await create_test_domain(fqdn="active-limit-test.com", is_default=True)
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 

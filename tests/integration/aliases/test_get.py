@@ -16,8 +16,9 @@ class TestGetAliases:
         create_test_user,
         create_test_domain,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         domain = await create_test_domain(fqdn="get-test.com", is_default=True)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
@@ -78,8 +79,9 @@ class TestGetAliases:
         create_test_user,
         create_test_domain,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         domain = await create_test_domain(fqdn="exclude-test.com", is_default=True)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
@@ -119,9 +121,10 @@ class TestGetAliases:
         create_test_user,
         create_test_domain,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user1 = await create_test_user(password="TestP@ss123!")
-        user2 = await create_test_user(password="TestP@ss123!")
+        user1 = await create_test_user(password=valid_test_password)
+        user2 = await create_test_user(password=valid_test_password)
         domain = await create_test_domain(fqdn="isolate-test.com", is_default=True)
 
         token1 = await create_auth_token(user_id=user1.id, role=UserRole.USER)
@@ -159,8 +162,9 @@ class TestGetAliases:
         http_client: AsyncClient,
         create_test_user,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 

@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -15,7 +17,7 @@ class TestAliasesRateLimits:
         limit = int(settings.RATE_LIMIT_ALIAS_CREATION.split("/")[0])
         headers = await authenticated_headers()
         payload = {
-            "domain_id": "00000000-0000-0000-0000-000000000000",
+            "domain_id": str(uuid.uuid4()),
             "local_part": "test",
         }
         await rate_limit_checker(http_client, "POST", "/api/v1/aliases", limit, payload, headers)
@@ -31,7 +33,7 @@ class TestAliasesRateLimits:
         await rate_limit_checker(
             http_client,
             "DELETE",
-            "/api/v1/aliases/00000000-0000-0000-0000-000000000000",
+            f"/api/v1/aliases/{uuid.uuid4()}",
             limit,
             headers=headers,
         )

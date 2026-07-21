@@ -1,3 +1,5 @@
+import uuid
+
 import pytest
 from faker import Faker
 from httpx import AsyncClient
@@ -20,16 +22,20 @@ from app.schemas.verification import (
 @pytest.mark.anyio
 class TestConfirmVerification:
     async def test_success_valid_otp_issues_token(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "44444444-4444-4444-4444-444444444444"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.USER_CREATION
-        otp_code = "123456"
 
-        await create_verification_session(email, verification_id, action_type, otp_code)
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
-        payload = {"otp_code": otp_code}
+        payload = {"otp_code": dummy_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 200
@@ -54,16 +60,20 @@ class TestConfirmVerification:
         assert token_data.action_type == action_type
 
     async def test_idempotency_second_call_returns_not_found(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "99999999-9999-9999-9999-999999999999"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.EMAIL_CHANGE
-        otp_code = "654321"
 
-        await create_verification_session(email, verification_id, action_type, otp_code)
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
-        payload = {"otp_code": otp_code}
+        payload = {"otp_code": dummy_otp_code}
         response_first = await http_client.patch(
             f"/api/v1/verifications/{verification_id}", json=payload
         )
@@ -92,7 +102,7 @@ class TestConfirmVerification:
     async def test_validation_errors_invalid_otp_format(
         self, http_client: AsyncClient, payload: dict
     ) -> None:
-        verification_id = "55555555-5555-5555-5555-555555555555"
+        verification_id = str(uuid.uuid4())
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 422
@@ -106,10 +116,10 @@ class TestConfirmVerification:
         assert isinstance(data["field_errors"], list)
 
     async def test_business_error_session_not_found(
-        self, http_client: AsyncClient, faker: Faker
+        self, http_client: AsyncClient, faker: Faker, dummy_otp_code: str
     ) -> None:
-        verification_id = "66666666-6666-6666-6666-666666666666"
-        payload = {"otp_code": "123456"}
+        verification_id = str(uuid.uuid4())
+        payload = {"otp_code": dummy_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 404
@@ -121,15 +131,21 @@ class TestConfirmVerification:
         assert isinstance(data["instance"], str)
 
     async def test_business_error_invalid_otp_increments_counter(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
+        invalid_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "77777777-7777-7777-7777-777777777777"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.PASSWORD_RESET
 
-        await create_verification_session(email, verification_id, action_type, "123456")
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
-        payload = {"otp_code": "000000"}
+        payload = {"otp_code": invalid_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 400
@@ -154,21 +170,27 @@ class TestConfirmVerification:
         assert stored_token is None
 
     async def test_business_error_attempts_limit_exceeded(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
+        invalid_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "88888888-8888-8888-8888-888888888888"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.EMAIL_CHANGE
 
         await create_verification_session(
             email,
             verification_id,
             action_type,
-            "123456",
+            dummy_otp_code,
             check_attempts=settings.VERIFICATION_MAX_CHECK_ATTEMPTS,
         )
 
-        payload = {"otp_code": "000000"}
+        payload = {"otp_code": invalid_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 400
@@ -180,14 +202,20 @@ class TestConfirmVerification:
         assert isinstance(data["instance"], str)
 
     async def test_business_error_session_ttl_expired_before_confirm(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.USER_CREATION
-        otp_code = "111111"
 
-        await create_verification_session(email, verification_id, action_type, otp_code, ttl=1)
+        await create_verification_session(
+            email, verification_id, action_type, dummy_otp_code, ttl=1
+        )
 
         session_key = f"verification:{verification_id}"
         contact_hash = hash_contact(email)
@@ -195,7 +223,7 @@ class TestConfirmVerification:
         await redis_client.expire(session_key, 0)
         await redis_client.expire(contact_key, 0)
 
-        payload = {"otp_code": otp_code}
+        payload = {"otp_code": dummy_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 404
@@ -207,15 +235,21 @@ class TestConfirmVerification:
         assert isinstance(data["instance"], str)
 
     async def test_failed_attempt_does_not_create_verification_token(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
+        dummy_otp_code: str,
+        invalid_otp_code: str,
     ) -> None:
         email = faker.email().lower()
-        verification_id = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        verification_id = str(uuid.uuid4())
         action_type = VerificationActionType.USER_DELETION
 
-        await create_verification_session(email, verification_id, action_type, "999999")
+        await create_verification_session(email, verification_id, action_type, dummy_otp_code)
 
-        payload = {"otp_code": "000000"}
+        payload = {"otp_code": invalid_otp_code}
         response = await http_client.patch(f"/api/v1/verifications/{verification_id}", json=payload)
 
         assert response.status_code == 400

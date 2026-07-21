@@ -10,11 +10,14 @@ class TestPasswordsRateLimits:
         self,
         http_client: AsyncClient,
         rate_limit_checker,
+        test_email: str,
+        valid_test_password: str,
+        dummy_verification_token: str,
     ) -> None:
         limit = int(settings.RATE_LIMIT_PASSWORD_UPDATE.split("/")[0])
         payload = {
-            "email": "test@example.com",
-            "new_password": "TestP@ss123!",
-            "verification_token": "a" * 43,
+            "email": test_email,
+            "new_password": valid_test_password,
+            "verification_token": dummy_verification_token,
         }
         await rate_limit_checker(http_client, "PATCH", "/api/v1/passwords", limit, payload)

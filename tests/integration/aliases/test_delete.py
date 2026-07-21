@@ -18,11 +18,12 @@ class TestDeleteAlias:
         create_test_domain,
         create_auth_token,
         monkeypatch,
+        valid_test_password: str,
     ) -> None:
         mock_task = MagicMock()
         monkeypatch.setattr("app.api.v1.endpoints.aliases.deprovision_alias_task", mock_task)
 
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         domain = await create_test_domain(fqdn="delete-test.com", is_default=True)
 
         alias = Alias(
@@ -62,11 +63,12 @@ class TestDeleteAlias:
         create_test_domain,
         create_auth_token,
         monkeypatch,
+        valid_test_password: str,
     ) -> None:
         mock_task = MagicMock()
         monkeypatch.setattr("app.api.v1.endpoints.aliases.deprovision_alias_task", mock_task)
 
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         domain = await create_test_domain(fqdn="idempotent-test.com", is_default=True)
 
         alias = Alias(
@@ -110,8 +112,9 @@ class TestDeleteAlias:
         http_client: AsyncClient,
         create_test_user,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 
@@ -127,8 +130,9 @@ class TestDeleteAlias:
         http_client: AsyncClient,
         create_test_user,
         create_auth_token,
+        valid_test_password: str,
     ) -> None:
-        user = await create_test_user(password="TestP@ss123!")
+        user = await create_test_user(password=valid_test_password)
         token = await create_auth_token(user_id=user.id, role=UserRole.USER)
         headers = {"Authorization": f"Bearer {token}"}
 

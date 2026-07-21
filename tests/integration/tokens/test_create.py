@@ -95,11 +95,11 @@ class TestCreateToken:
         http_client: AsyncClient,
         create_test_user,
         valid_test_password: str,
+        wrong_test_password: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
 
-        wrong_password = valid_test_password.replace("Valid", "Wrong")
-        payload = {"email": user.email, "password": wrong_password}
+        payload = {"email": user.email, "password": wrong_test_password}
         response = await http_client.post("/api/v1/tokens", json=payload)
 
         assert response.status_code == 401
@@ -158,6 +158,7 @@ class TestCreateToken:
         redis_client,
         create_test_user,
         valid_test_password: str,
+        wrong_test_password: str,
         faker,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
@@ -179,8 +180,7 @@ class TestCreateToken:
             ex=3600,
         )
 
-        wrong_password = valid_test_password.replace("Valid", "Wrong")
-        payload = {"email": user.email, "password": wrong_password}
+        payload = {"email": user.email, "password": wrong_test_password}
         response = await http_client.post("/api/v1/tokens", json=payload)
 
         assert response.status_code == 423
@@ -202,12 +202,12 @@ class TestCreateToken:
         redis_client,
         create_test_user,
         valid_test_password: str,
+        wrong_test_password: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
         email_hash = hash_contact(user.email)
 
-        wrong_password = valid_test_password.replace("Valid", "Wrong")
-        payload = {"email": user.email, "password": wrong_password}
+        payload = {"email": user.email, "password": wrong_test_password}
 
         for _attempt in range(3):
             response = await http_client.post("/api/v1/tokens", json=payload)
@@ -230,12 +230,12 @@ class TestCreateToken:
         redis_client,
         create_test_user,
         valid_test_password: str,
+        wrong_test_password: str,
     ) -> None:
         user = await create_test_user(password=valid_test_password)
         email_hash = hash_contact(user.email)
 
-        wrong_password = valid_test_password.replace("Valid", "Wrong")
-        payload_wrong = {"email": user.email, "password": wrong_password}
+        payload_wrong = {"email": user.email, "password": wrong_test_password}
         response = await http_client.post("/api/v1/tokens", json=payload_wrong)
         assert response.status_code == 401
 

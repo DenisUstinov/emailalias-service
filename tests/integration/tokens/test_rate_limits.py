@@ -10,7 +10,9 @@ class TestTokensRateLimits:
         self,
         http_client: AsyncClient,
         rate_limit_checker,
+        test_email: str,
+        valid_test_password: str,
     ) -> None:
         limit = int(settings.RATE_LIMIT_TOKEN_CREATION.split("/")[0])
-        payload = {"email": "test@example.com", "password": "TestP@ss123!"}
+        payload = {"email": test_email, "password": valid_test_password}
         await rate_limit_checker(http_client, "POST", "/api/v1/tokens", limit, payload)

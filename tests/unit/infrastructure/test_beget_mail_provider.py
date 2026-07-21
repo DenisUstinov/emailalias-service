@@ -11,6 +11,10 @@ from app.core.exceptions import (
 from app.infrastructure.beget_mail_provider import BegetMailProviderAdapter
 from app.models.domain import Alias, Domain
 
+TEST_FORWARDING_EMAIL = "forward@example.com"
+TEST_OLD_FORWARDING_EMAIL = "old@example.com"
+TEST_NEW_FORWARDING_EMAIL = "new@example.com"
+
 
 @pytest.mark.anyio
 class TestBegetMailProviderAdapterMakeRequest:
@@ -25,10 +29,10 @@ class TestBegetMailProviderAdapterMakeRequest:
         ) as mock_get:
             await adapter._make_request("testMethod", {"key": "value"})
 
-        mock_get.assert_awaited_once()
-        call_args = mock_get.await_args
-        assert call_args[0][0] == "/testMethod"
-        assert json.loads(call_args[1]["params"]["input_data"]) == {"key": "value"}
+            mock_get.assert_awaited_once()
+            call_args = mock_get.await_args
+            assert call_args[0][0] == "/testMethod"
+            assert json.loads(call_args[1]["params"]["input_data"]) == {"key": "value"}
 
     async def test_api_level_error(self) -> None:
         adapter = BegetMailProviderAdapter()
@@ -67,6 +71,7 @@ class TestBegetMailProviderAdapterMakeRequest:
 
     async def test_timeout_raises_unavailable(self) -> None:
         adapter = BegetMailProviderAdapter()
+
         with (
             patch.object(
                 adapter._client,
@@ -84,6 +89,7 @@ class TestBegetMailProviderAdapterMakeRequest:
         adapter = BegetMailProviderAdapter()
         mock_http_response = MagicMock()
         mock_http_response.status_code = 500
+
         with (
             patch.object(
                 adapter._client,
@@ -101,6 +107,7 @@ class TestBegetMailProviderAdapterMakeRequest:
 
     async def test_connection_error_raises_unavailable(self) -> None:
         adapter = BegetMailProviderAdapter()
+
         with (
             patch.object(
                 adapter._client,
@@ -126,35 +133,35 @@ class TestBegetMailProviderAdapterProvisionAlias:
             patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
             patch.object(adapter, "_generate_mailbox_password", return_value="SecurePass123"),
         ):
-            await adapter.provision_alias(alias, "forward@example.com")
+            await adapter.provision_alias(alias, TEST_FORWARDING_EMAIL)
 
-        assert mock_make_request.await_count == 3
-        mock_make_request.assert_any_await(
-            "createMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "mailbox_password": "SecurePass123",
-            },
-        )
-        mock_make_request.assert_any_await(
-            "forwardListAddMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "forward_mailbox": "forward@example.com",
-            },
-        )
-        mock_make_request.assert_any_await(
-            "changeMailboxSettings",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "spam_filter_status": 0,
-                "spam_filter": 20,
-                "forward_mail_status": "forward_and_delete",
-            },
-        )
+            assert mock_make_request.await_count == 3
+            mock_make_request.assert_any_await(
+                "createMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "mailbox_password": "SecurePass123",
+                },
+            )
+            mock_make_request.assert_any_await(
+                "forwardListAddMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "forward_mailbox": TEST_FORWARDING_EMAIL,
+                },
+            )
+            mock_make_request.assert_any_await(
+                "changeMailboxSettings",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "spam_filter_status": 0,
+                    "spam_filter": 20,
+                    "forward_mail_status": "forward_and_delete",
+                },
+            )
 
     async def test_raises_on_provider_rejection(self) -> None:
         adapter = BegetMailProviderAdapter()
@@ -170,7 +177,7 @@ class TestBegetMailProviderAdapterProvisionAlias:
             ),
             pytest.raises(ExternalProviderRejectionError),
         ):
-            await adapter.provision_alias(alias, "forward@example.com")
+            await adapter.provision_alias(alias, TEST_FORWARDING_EMAIL)
 
 
 @pytest.mark.anyio
@@ -185,40 +192,40 @@ class TestBegetMailProviderAdapterUpdateForwardingEmail:
                 adapter,
                 "_get_current_forwarding_list",
                 new_callable=AsyncMock,
-                return_value=["old@example.com"],
+                return_value=[TEST_OLD_FORWARDING_EMAIL],
             ) as mock_get_list,
             patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
         ):
-            await adapter.update_forwarding_email(alias, "new@example.com")
+            await adapter.update_forwarding_email(alias, TEST_NEW_FORWARDING_EMAIL)
 
-        mock_get_list.assert_awaited_once_with("example.com", "test.abc123")
-        assert mock_make_request.await_count == 3
-        mock_make_request.assert_any_await(
-            "forwardListDeleteMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "forward_mailbox": "old@example.com",
-            },
-        )
-        mock_make_request.assert_any_await(
-            "forwardListAddMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "forward_mailbox": "new@example.com",
-            },
-        )
-        mock_make_request.assert_any_await(
-            "changeMailboxSettings",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "spam_filter_status": 0,
-                "spam_filter": 20,
-                "forward_mail_status": "forward_and_delete",
-            },
-        )
+            mock_get_list.assert_awaited_once_with("example.com", "test.abc123")
+            assert mock_make_request.await_count == 3
+            mock_make_request.assert_any_await(
+                "forwardListDeleteMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "forward_mailbox": TEST_OLD_FORWARDING_EMAIL,
+                },
+            )
+            mock_make_request.assert_any_await(
+                "forwardListAddMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "forward_mailbox": TEST_NEW_FORWARDING_EMAIL,
+                },
+            )
+            mock_make_request.assert_any_await(
+                "changeMailboxSettings",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "spam_filter_status": 0,
+                    "spam_filter": 20,
+                    "forward_mail_status": "forward_and_delete",
+                },
+            )
 
     async def test_skips_deletion_if_list_empty(self) -> None:
         adapter = BegetMailProviderAdapter()
@@ -234,27 +241,27 @@ class TestBegetMailProviderAdapterUpdateForwardingEmail:
             ),
             patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request,
         ):
-            await adapter.update_forwarding_email(alias, "new@example.com")
+            await adapter.update_forwarding_email(alias, TEST_NEW_FORWARDING_EMAIL)
 
-        assert mock_make_request.await_count == 2
-        mock_make_request.assert_any_await(
-            "forwardListAddMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "forward_mailbox": "new@example.com",
-            },
-        )
-        mock_make_request.assert_any_await(
-            "changeMailboxSettings",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-                "spam_filter_status": 0,
-                "spam_filter": 20,
-                "forward_mail_status": "forward_and_delete",
-            },
-        )
+            assert mock_make_request.await_count == 2
+            mock_make_request.assert_any_await(
+                "forwardListAddMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "forward_mailbox": TEST_NEW_FORWARDING_EMAIL,
+                },
+            )
+            mock_make_request.assert_any_await(
+                "changeMailboxSettings",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                    "spam_filter_status": 0,
+                    "spam_filter": 20,
+                    "forward_mail_status": "forward_and_delete",
+                },
+            )
 
 
 @pytest.mark.anyio
@@ -267,13 +274,13 @@ class TestBegetMailProviderAdapterDeprovisionAlias:
         with patch.object(adapter, "_make_request", new_callable=AsyncMock) as mock_make_request:
             await adapter.deprovision_alias(alias)
 
-        mock_make_request.assert_awaited_once_with(
-            "dropMailbox",
-            {
-                "domain": "example.com",
-                "mailbox": "test.abc123",
-            },
-        )
+            mock_make_request.assert_awaited_once_with(
+                "dropMailbox",
+                {
+                    "domain": "example.com",
+                    "mailbox": "test.abc123",
+                },
+            )
 
     async def test_swallows_not_found_error(self) -> None:
         adapter = BegetMailProviderAdapter()

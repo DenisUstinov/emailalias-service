@@ -22,14 +22,23 @@ _secure_password_validator = TypeAdapter(SecurePassword)
 
 VALID_TEST_PASSWORD = "ValidP@ssword123!"
 NEW_VALID_TEST_PASSWORD = "NewV@lidPass456!"
+WRONG_TEST_PASSWORD = "WrongP@ssword123!"
 INVALID_TEST_PASSWORD = "InvalidPassword"
 
 TEST_EMAIL = "test@example.com"
 TEST_EMAIL_ALT = "new@example.com"
 TEST_EMAIL_CONFLICT = "conflict@example.com"
 
+DUMMY_VERIFICATION_TOKEN = "a" * 43
+SECOND_DUMMY_VERIFICATION_TOKEN = "b" * 43
+INVALID_VERIFICATION_TOKEN = "invalid_token_not_in_redis_1234567890123456"
+
+DUMMY_OTP_CODE = "123456"
+INVALID_OTP_CODE = "000000"
+
 _secure_password_validator.validate_python(VALID_TEST_PASSWORD)
 _secure_password_validator.validate_python(NEW_VALID_TEST_PASSWORD)
+_secure_password_validator.validate_python(WRONG_TEST_PASSWORD)
 
 
 @pytest.fixture
@@ -45,6 +54,11 @@ def valid_test_password() -> str:
 @pytest.fixture
 def new_valid_test_password() -> str:
     return NEW_VALID_TEST_PASSWORD
+
+
+@pytest.fixture
+def wrong_test_password() -> str:
+    return WRONG_TEST_PASSWORD
 
 
 @pytest.fixture
@@ -73,6 +87,31 @@ def generate_test_email() -> Callable[[str], str]:
         return f"{prefix}_{uuid.uuid4().hex}@example.com".lower()
 
     return _generate
+
+
+@pytest.fixture
+def dummy_verification_token() -> str:
+    return DUMMY_VERIFICATION_TOKEN
+
+
+@pytest.fixture
+def second_dummy_verification_token() -> str:
+    return SECOND_DUMMY_VERIFICATION_TOKEN
+
+
+@pytest.fixture
+def invalid_verification_token() -> str:
+    return INVALID_VERIFICATION_TOKEN
+
+
+@pytest.fixture
+def dummy_otp_code() -> str:
+    return DUMMY_OTP_CODE
+
+
+@pytest.fixture
+def invalid_otp_code() -> str:
+    return INVALID_OTP_CODE
 
 
 @pytest.fixture

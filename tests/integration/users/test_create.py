@@ -21,21 +21,25 @@ class TestCreateUser:
         db_session,
         redis_client,
         create_verification_token,
-        valid_test_password,
+        valid_test_password: str,
         generate_test_email,
+        dummy_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="create")
         password = valid_test_password
 
-        raw_token = "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"
-        token_key = f"vtoken:{hash_token(raw_token)}"
+        token_key = f"vtoken:{hash_token(dummy_verification_token)}"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
-        payload = {"email": email, "password": password, "verification_token": raw_token}
+        payload = {
+            "email": email,
+            "password": password,
+            "verification_token": dummy_verification_token,
+        }
         response = await http_client.post("/api/v1/users", json=payload)
 
         assert response.status_code == 201
@@ -62,12 +66,13 @@ class TestCreateUser:
         self,
         http_client: AsyncClient,
         invalid_email: str,
-        valid_test_password,
+        valid_test_password: str,
+        dummy_verification_token: str,
     ) -> None:
         payload = {
             "email": invalid_email,
             "password": valid_test_password,
-            "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
+            "verification_token": dummy_verification_token,
         }
         response = await http_client.post("/api/v1/users", json=payload)
 
@@ -89,11 +94,12 @@ class TestCreateUser:
         self,
         http_client: AsyncClient,
         invalid_password: str,
+        dummy_verification_token: str,
     ) -> None:
         payload = {
             "email": "test@example.com",
             "password": invalid_password,
-            "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
+            "verification_token": dummy_verification_token,
         }
         response = await http_client.post("/api/v1/users", json=payload)
 
@@ -112,13 +118,13 @@ class TestCreateUser:
         [
             {
                 "email": "test@example.com",
-                "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
+                "verification_token": "dummy_token",
             },
             {
                 "password": "TestP@ssw0rd123!",
-                "verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW",
+                "verification_token": "dummy_token",
             },
-            {"verification_token": "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"},
+            {"verification_token": "dummy_token"},
             {"email": "test@example.com", "password": "TestP@ssw0rd123!"},
         ],
     )
@@ -140,14 +146,15 @@ class TestCreateUser:
     async def test_business_error_contact_not_verified(
         self,
         http_client: AsyncClient,
-        valid_test_password,
+        valid_test_password: str,
         generate_test_email,
+        invalid_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="create")
         payload = {
             "email": email,
             "password": valid_test_password,
-            "verification_token": "invalid_token_not_in_redis_1234567890123456",
+            "verification_token": invalid_verification_token,
         }
 
         response = await http_client.post("/api/v1/users", json=payload)
@@ -165,22 +172,22 @@ class TestCreateUser:
         self,
         http_client: AsyncClient,
         create_verification_token,
-        valid_test_password,
+        valid_test_password: str,
         generate_test_email,
+        dummy_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="create")
 
-        raw_token = "wrong_action_token_123456789012345678901234"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.PASSWORD_RESET,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
         payload = {
             "email": email,
             "password": valid_test_password,
-            "verification_token": raw_token,
+            "verification_token": dummy_verification_token,
         }
 
         response = await http_client.post("/api/v1/users", json=payload)
@@ -198,31 +205,39 @@ class TestCreateUser:
         self,
         http_client: AsyncClient,
         create_verification_token,
-        valid_test_password,
+        valid_test_password: str,
         generate_test_email,
+        dummy_verification_token: str,
+        second_dummy_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="create")
         password = valid_test_password
 
-        raw_token = "F7xK9mP2nQ4vL8wR3tY6uZ1sA5bC0dE2gH7jN9pM4xW"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
-        first_payload = {"email": email, "password": password, "verification_token": raw_token}
+        first_payload = {
+            "email": email,
+            "password": password,
+            "verification_token": dummy_verification_token,
+        }
         first_response = await http_client.post("/api/v1/users", json=first_payload)
         assert first_response.status_code == 201
 
-        raw_token_2 = "D9eL2kP5nQ8vM1wR4tY7uZ0sA3bC6dE9gH2jN5pM8xW"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-            raw_token=raw_token_2,
+            raw_token=second_dummy_verification_token,
         )
 
-        second_payload = {"email": email, "password": password, "verification_token": raw_token_2}
+        second_payload = {
+            "email": email,
+            "password": password,
+            "verification_token": second_dummy_verification_token,
+        }
         second_response = await http_client.post("/api/v1/users", json=second_payload)
 
         assert second_response.status_code == 409
@@ -241,9 +256,10 @@ class TestCreateUser:
         redis_client,
         create_test_user,
         create_verification_token,
-        valid_test_password,
-        new_valid_test_password,
+        valid_test_password: str,
+        new_valid_test_password: str,
         generate_test_email,
+        dummy_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="reactivate")
         old_password = valid_test_password
@@ -251,15 +267,18 @@ class TestCreateUser:
 
         user = await create_test_user(email=email, password=old_password, is_deleted=True)
 
-        raw_token = "R3aCt1v4t3T0k3nF0rT3st1ngPurp0s3sOn1y123456"
-        token_key = f"vtoken:{hash_token(raw_token)}"
+        token_key = f"vtoken:{hash_token(dummy_verification_token)}"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
-        payload = {"email": email, "password": new_password, "verification_token": raw_token}
+        payload = {
+            "email": email,
+            "password": new_password,
+            "verification_token": dummy_verification_token,
+        }
         response = await http_client.post("/api/v1/users", json=payload)
 
         assert response.status_code == 201
@@ -284,8 +303,9 @@ class TestCreateUser:
         db_session,
         create_test_user,
         create_verification_token,
-        valid_test_password,
+        valid_test_password: str,
         generate_test_email,
+        dummy_verification_token: str,
     ) -> None:
         email = generate_test_email(prefix="banned_react")
 
@@ -293,14 +313,17 @@ class TestCreateUser:
             email=email, password=valid_test_password, is_banned=True, is_deleted=True
         )
 
-        raw_token = "B4nn3dR34ctT0k3nF0rT3st1ngPurp0s3s0n1y12345"
         await create_verification_token(
             email=email,
             action_type=VerificationActionType.USER_CREATION,
-            raw_token=raw_token,
+            raw_token=dummy_verification_token,
         )
 
-        payload = {"email": email, "password": valid_test_password, "verification_token": raw_token}
+        payload = {
+            "email": email,
+            "password": valid_test_password,
+            "verification_token": dummy_verification_token,
+        }
         response = await http_client.post("/api/v1/users", json=payload)
 
         assert response.status_code == 403

@@ -10,12 +10,15 @@ class TestUsersRateLimits:
         self,
         http_client: AsyncClient,
         rate_limit_checker,
+        test_email: str,
+        valid_test_password: str,
+        dummy_verification_token: str,
     ) -> None:
         limit = int(settings.RATE_LIMIT_USER_CREATION.split("/")[0])
         payload = {
-            "email": "test@example.com",
-            "password": "TestP@ss123!",
-            "verification_token": "a" * 43,
+            "email": test_email,
+            "password": valid_test_password,
+            "verification_token": dummy_verification_token,
         }
         await rate_limit_checker(http_client, "POST", "/api/v1/users", limit, payload)
 
@@ -24,10 +27,12 @@ class TestUsersRateLimits:
         http_client: AsyncClient,
         authenticated_headers,
         rate_limit_checker,
+        test_email_alt: str,
+        dummy_verification_token: str,
     ) -> None:
         limit = int(settings.RATE_LIMIT_USER_UPDATE.split("/")[0])
         headers = await authenticated_headers()
-        payload = {"email": "new@example.com", "verification_token": "a" * 43}
+        payload = {"email": test_email_alt, "verification_token": dummy_verification_token}
         await rate_limit_checker(http_client, "PATCH", "/api/v1/users/me", limit, payload, headers)
 
     async def test_rate_limit_for_delete_me(
@@ -35,8 +40,9 @@ class TestUsersRateLimits:
         http_client: AsyncClient,
         authenticated_headers,
         rate_limit_checker,
+        dummy_verification_token: str,
     ) -> None:
         limit = int(settings.RATE_LIMIT_USER_DELETION.split("/")[0])
         headers = await authenticated_headers()
-        payload = {"verification_token": "a" * 43}
+        payload = {"verification_token": dummy_verification_token}
         await rate_limit_checker(http_client, "DELETE", "/api/v1/users/me", limit, payload, headers)
