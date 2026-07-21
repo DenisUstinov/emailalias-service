@@ -187,12 +187,15 @@ class TestCreateVerification:
         assert isinstance(data["field_errors"], list)
 
     async def test_business_error_cooldown_not_elapsed(
-        self, http_client: AsyncClient, redis_client, faker: Faker, create_verification_session
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
+        create_verification_session,
     ) -> None:
         email = faker.email().lower()
         verification_id = "33333333-3333-3333-3333-333333333333"
         action_type = VerificationActionType.USER_DELETION
-
         await create_verification_session(email, verification_id, action_type, "111222")
 
         ttl_during_cooldown = settings.VERIFICATION_TTL_SECONDS - 10
@@ -217,7 +220,10 @@ class TestCreateVerification:
         assert isinstance(data["instance"], str)
 
     async def test_business_error_max_requests_exceeded(
-        self, http_client: AsyncClient, redis_client, faker: Faker
+        self,
+        http_client: AsyncClient,
+        redis_client,
+        faker: Faker,
     ) -> None:
         email = faker.email().lower()
         contact_hash = hash_contact(email)
@@ -297,9 +303,37 @@ class TestCreateVerification:
         payload = {"email": email, "action_type": action_type.value}
 
         response = await http_client.post("/api/v1/verifications", json=payload)
+
         assert response.status_code == 202
         data = VerificationCreateResponse(**response.json())
-
         assert len(str(data.verification_id)) == 36
         assert isinstance(data.expires_in, int)
         assert data.expires_in == settings.VERIFICATION_TTL_SECONDS
+
+    async def test_business_error_queue_overload_returns_503(
+        self,
+        http_client: AsyncClient,
+        faker: Faker,
+        monkeypatch,
+    ) -> None:
+        from kombu.exceptions import OperationalError
+
+        from app.api.v1.endpoints import verifications
+
+        mock_task = MagicMock()
+        mock_task.apply_async.side_effect = OperationalError("Queue full")
+        monkeypatch.setattr(verifications, "send_otp_task", mock_task)
+
+        email = faker.email().lower()
+        payload = {"email": email, "action_type": VerificationActionType.USER_CREATION.value}
+
+        response = await http_client.post("/api/v1/verifications", json=payload)
+
+        assert response.status_code == 503
+        data = response.json()
+        assert isinstance(data["status"], int)
+        assert data["status"] == 503
+        assert isinstance(data["type"], str)
+        assert isinstance(data["title"], str)
+        assert isinstance(data["detail"], str)
+        assert isinstance(data["instance"], str)

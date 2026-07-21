@@ -1,4 +1,5 @@
 from celery import Celery
+from kombu import Queue
 from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
@@ -23,8 +24,28 @@ celery_app.conf.update(
     task_retry_backoff=settings.CELERY_TASK_RETRY_BACKOFF_SECONDS,
     task_retry_backoff_max=settings.CELERY_TASK_RETRY_BACKOFF_MAX_SECONDS,
     task_retry_jitter=settings.CELERY_TASK_RETRY_JITTER,
+    task_publish_retry=False,
+    broker_transport_options={
+        "confirm_publish": True,
+    },
+    task_queues=(
+        Queue(
+            settings.CELERY_TASK_DEFAULT_QUEUE,
+            routing_key=settings.CELERY_TASK_DEFAULT_QUEUE,
+        ),
+        Queue(
+            "otp_queue",
+            routing_key="otp",
+            queue_arguments={
+                "x-max-length": settings.CELERY_OTP_QUEUE_MAX_LENGTH,
+                "x-overflow": "reject-publish",
+            },
+        ),
+    ),
+    task_routes={
+        "app.infrastructure.celery.tasks.send_otp_task": {"queue": "otp_queue"},
+    },
 )
 
 celery_app.conf.task_autoretry_for = (OperationalError, ConnectionError, TimeoutError)
-
 celery_app.autodiscover_tasks(["app.infrastructure.celery"])

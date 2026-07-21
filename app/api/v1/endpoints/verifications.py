@@ -57,6 +57,7 @@ async def confirm_verification(
         400: {"description": "Cooldown not elapsed or limits exceeded"},
         422: {"description": "Validation error in request data"},
         429: {"description": "Rate limit exceeded"},
+        503: {"description": "Verification queue is full, service temporarily unavailable"},
     },
 )
 @limiter.limit(settings.RATE_LIMIT_VERIFICATION_CREATION)
@@ -69,5 +70,7 @@ async def create_verification(
         contact=data.email,
         action_type=data.action_type,
     )
+
     send_otp_task.apply_async(args=[data.email, str(result.verification_id)])
+
     return result

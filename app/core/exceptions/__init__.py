@@ -29,6 +29,7 @@ from .verifications import (
     VerificationInvalidOTPError,
     VerificationMaxAttemptsExceededError,
     VerificationMaxRequestsExceededError,
+    VerificationQueueOverloadError,
     VerificationSessionNotFoundError,
 )
 
@@ -55,5 +56,6 @@ __all__ = [
     "VerificationInvalidOTPError",
     "VerificationMaxAttemptsExceededError",
     "VerificationMaxRequestsExceededError",
+    "VerificationQueueOverloadError",
     "VerificationSessionNotFoundError",
 ]

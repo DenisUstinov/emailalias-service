@@ -57,3 +57,11 @@ class ContactNotVerifiedError(AppException):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Contact not verified. Please verify your contact before proceeding.",
         )
+
+
+class VerificationQueueOverloadError(AppException):
+    def __init__(self) -> None:
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Verification service is currently overloaded. Please try again later.",
+        )

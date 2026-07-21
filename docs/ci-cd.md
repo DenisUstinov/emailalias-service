@@ -38,16 +38,21 @@ BEGET_LOGIN="your_login"
 BEGET_PASSWORD="your_password"
 
 # Генерируем надежные пароли для проекта и сохраняем их вместе с данными от Beget в секреты GitHub
-openssl rand -hex 32 | gh secret set SECRET_KEY --env "$ENV_NAME"
-openssl rand -base64 32 | gh secret set POSTGRES_PASSWORD --env "$ENV_NAME"
-openssl rand -base64 32 | gh secret set RABBITMQ_PASSWORD --env "$ENV_NAME"
-gh secret set BEGET_LOGIN --env "$ENV_NAME" --body "$BEGET_LOGIN"
-gh secret set BEGET_PASSWORD --env "$ENV_NAME" --body "$BEGET_PASSWORD"
+SECRET_KEY=$(openssl rand -hex 32)
+echo "SECRET_KEY=$SECRET_KEY"
+printf '%s' "$SECRET_KEY" | gh secret set SECRET_KEY --env "$ENV_NAME"
+POSTGRES_PASSWORD=$(openssl rand -base64 32)
+echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+printf '%s' "$POSTGRES_PASSWORD" | gh secret set POSTGRES_PASSWORD --env "$ENV_NAME"
+RABBITMQ_PASSWORD=$(openssl rand -base64 32)
+echo "RABBITMQ_PASSWORD=$RABBITMQ_PASSWORD"
+printf '%s' "$RABBITMQ_PASSWORD" | gh secret set RABBITMQ_PASSWORD --env "$ENV_NAME"
+gh secret set BEGET_LOGIN --body "$BEGET_LOGIN" --env "$ENV_NAME"
+gh secret set BEGET_PASSWORD --body "$BEGET_PASSWORD" --env "$ENV_NAME"
 
 # Сохраняем обычные настройки проекта (названия, порты, ссылки) в переменные GitHub
 gh variable set BACKEND_CORS_ORIGINS --body "http://localhost:3000" --env "$ENV_NAME"
 gh variable set COMPOSE_PROJECT_NAME --body "emailalias" --env "$ENV_NAME"
-gh variable set PORT --body "8080" --env "$ENV_NAME"
 gh variable set POSTGRES_DB --body "emailalias_db" --env "$ENV_NAME"
 gh variable set POSTGRES_HOST --body "postgres" --env "$ENV_NAME"
 gh variable set POSTGRES_USER --body "postgres" --env "$ENV_NAME"
