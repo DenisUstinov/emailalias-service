@@ -21,11 +21,11 @@ COPY --from=builder /wheels /wheels
 RUN python -m pip install --no-cache-dir /wheels/* \
     && rm -rf /wheels
 RUN useradd --create-home --uid 1000 appuser
-RUN chown appuser:appuser /app
+RUN chown -R appuser:appuser /app
 COPY --chown=appuser:appuser . .
 USER appuser
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=nginx"]
 
 # development
 FROM runtime AS development

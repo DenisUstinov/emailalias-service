@@ -2,12 +2,11 @@ services:
   api:
     build:
       target: development
-    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--proxy-headers", "--forwarded-allow-ips=*"]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--proxy-headers", "--forwarded-allow-ips=nginx"]
     volumes:
       - ./app:/app/app
       - ./migrations:/app/migrations
       - ./tests:/app/tests
-      - uv_cache:/root/.cache/uv
     env_file:
       - .env
 
@@ -35,13 +34,15 @@ services:
       start_period: 15s
 
   rabbitmq:
-    ports:
-      - "15672:15672"
     healthcheck:
       interval: 15s
       timeout: 10s
       retries: 3
       start_period: 45s
+
+  nginx:
+    volumes:
+      - ./nginx/conf.d/dev.conf:/etc/nginx/conf.d/dev.conf:ro
 
 volumes:
   uv_cache:

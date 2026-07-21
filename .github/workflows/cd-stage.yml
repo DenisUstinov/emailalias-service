@@ -27,7 +27,6 @@ jobs:
       BEGET_LOGIN: ${{ secrets.BEGET_LOGIN }}
       BEGET_PASSWORD: ${{ secrets.BEGET_PASSWORD }}
       COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
-      PORT: ${{ vars.PORT }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}

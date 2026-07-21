@@ -6,10 +6,14 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from kombu.exceptions import OperationalError as KombuOperationalError
 from prometheus_fastapi_instrumentator import Instrumentator
 from redis.asyncio import ConnectionPool, Redis
+from redis.exceptions import ConnectionError as RedisConnectionError
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from sqlalchemy.exc import OperationalError as SQLAlchemyOperationalError
+from sqlalchemy.exc import TimeoutError as SQLAlchemyTimeoutError
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.api.v1.router import api_v1_router
@@ -20,6 +24,23 @@ from app.core.rate_limiter import limiter
 
 setup_logging()
 logger = logging.getLogger(__name__)
+
+
+def _get_title_for_status(status_code: int) -> str:
+    titles = {
+        400: "Bad Request",
+        401: "Unauthorized",
+        403: "Forbidden",
+        404: "Not Found",
+        409: "Conflict",
+        422: "Unprocessable Content",
+        429: "Too Many Requests",
+        500: "Internal Server Error",
+        502: "Bad Gateway",
+        503: "Service Unavailable",
+        504: "Gateway Timeout",
+    }
+    return titles.get(status_code, "Error")
 
 
 @asynccontextmanager
@@ -54,6 +75,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
+
 Instrumentator().instrument(app).expose(
     app, endpoint="/metrics", include_in_schema=False, should_gzip=True
 )
@@ -63,7 +86,7 @@ if settings.BACKEND_CORS_ORIGINS:
         CORSMiddleware,
         allow_origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+        allow_methods=["GET", "POST", "DELETE", "PATCH"],
         allow_headers=["*"],
     )
 
@@ -71,7 +94,9 @@ app.add_middleware(SlowAPIMiddleware)
 app.state.limiter = limiter
 
 
-@app.get("/health", status_code=status.HTTP_200_OK, summary="Liveness probe")
+@app.get(
+    "/health", status_code=status.HTTP_200_OK, summary="Liveness probe", include_in_schema=False
+)
 @limiter.exempt
 async def health_check():
     return {"status": "healthy", "service": settings.SERVICE_NAME}
@@ -112,7 +137,6 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
     return response
 
 
@@ -150,6 +174,83 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             "title": _get_title_for_status(exc.status_code),
             "status": exc.status_code,
             "detail": exc.detail,
+            "instance": str(request.url),
+        },
+    )
+
+
+@app.exception_handler(KombuOperationalError)
+async def kombu_operational_error_handler(
+    request: Request, exc: KombuOperationalError
+) -> JSONResponse:
+    logger.warning(
+        "KombuOperationalError: Queue overload or connection issue",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "detail": str(exc),
+        },
+    )
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=status_code,
+        media_type="application/problem+json",
+        content={
+            "type": f"{settings.SERVICE_NAME}/errors/{status_code}",
+            "title": _get_title_for_status(status_code),
+            "status": status_code,
+            "detail": "Verification queue is full, service temporarily unavailable.",
+            "instance": str(request.url),
+        },
+    )
+
+
+@app.exception_handler(SQLAlchemyOperationalError)
+@app.exception_handler(SQLAlchemyTimeoutError)
+async def database_pool_exhausted_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.warning(
+        "Database pool exhausted or connection timeout",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "detail": str(exc),
+        },
+    )
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=status_code,
+        media_type="application/problem+json",
+        content={
+            "type": f"{settings.SERVICE_NAME}/errors/{status_code}",
+            "title": _get_title_for_status(status_code),
+            "status": status_code,
+            "detail": "Database connection pool exhausted. Please try again later.",
+            "instance": str(request.url),
+        },
+    )
+
+
+@app.exception_handler(RedisConnectionError)
+async def redis_connection_error_handler(
+    request: Request, exc: RedisConnectionError
+) -> JSONResponse:
+    logger.warning(
+        "Redis connection error",
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+            "detail": str(exc),
+        },
+    )
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(
+        status_code=status_code,
+        media_type="application/problem+json",
+        content={
+            "type": f"{settings.SERVICE_NAME}/errors/{status_code}",
+            "title": _get_title_for_status(status_code),
+            "status": status_code,
+            "detail": "Redis service unavailable. Please try again later.",
             "instance": str(request.url),
         },
     )
@@ -223,23 +324,3 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
             "field_errors": errors,
         },
     )
-
-
-def _get_title_for_status(status_code: int) -> str:
-    titles = {
-        400: "Bad Request",
-        401: "Unauthorized",
-        403: "Forbidden",
-        404: "Not Found",
-        409: "Conflict",
-        422: "Unprocessable Content",
-        429: "Too Many Requests",
-        500: "Internal Server Error",
-        502: "Bad Gateway",
-        503: "Service Unavailable",
-        504: "Gateway Timeout",
-    }
-    return titles.get(status_code, "Error")
-
-
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")

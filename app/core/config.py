@@ -2,14 +2,10 @@ from functools import lru_cache
 from urllib.parse import quote_plus
 
 from pydantic import Field, RedisDsn, SecretStr, computed_field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", case_sensitive=False, extra="ignore"
-    )
-
     # Application
     SERVICE_NAME: str = Field(..., min_length=1)
     SERVICE_DESCRIPTION: str = Field(..., min_length=1)
@@ -59,6 +55,9 @@ class Settings(BaseSettings):
     # Celery: Observability
     CELERY_WORKER_SEND_TASK_EVENTS: bool = True
     CELERY_TASK_SEND_SENT_EVENT: bool = True
+
+    # Celery: Queue Limits (New)
+    CELERY_OTP_QUEUE_MAX_LENGTH: int = Field(default=500, gt=0)
 
     # External Providers (Beget)
     BEGET_API_URL: str = Field(default="https://api.beget.com/api/mail", min_length=1)

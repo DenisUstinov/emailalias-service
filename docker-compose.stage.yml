@@ -1,7 +1,101 @@
+x-common-env: &stage-env
+  BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS}
+  BEGET_LOGIN: ${BEGET_LOGIN}
+  BEGET_PASSWORD: ${BEGET_PASSWORD}
+  POSTGRES_DB: ${POSTGRES_DB}
+  POSTGRES_HOST: ${POSTGRES_HOST}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  POSTGRES_USER: ${POSTGRES_USER}
+  RABBITMQ_HOST: ${RABBITMQ_HOST}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+  RABBITMQ_USER: ${RABBITMQ_USER}
+  RABBITMQ_VHOST: ${RABBITMQ_VHOST}
+  RATE_LIMIT_VERIFICATION_CREATION: ${RATE_LIMIT_VERIFICATION_CREATION}
+  REDIS_URL: ${REDIS_URL}
+  SECRET_KEY: ${SECRET_KEY}
+  SERVICE_DESCRIPTION: ${SERVICE_DESCRIPTION}
+  SERVICE_NAME: ${SERVICE_NAME}
+
 services:
   api:
+    environment:
+      <<: *stage-env
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    environment:
+      <<: *stage-env
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rabbitmq:
+    ports:
+      - "15672:15672"
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
     volumes:
-      - ./loadtests:/app/loadtests:ro
+      - ./nginx/conf.d/stage.conf:/etc/nginx/conf.d/stage.conf:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   prometheus:
     image: prom/prometheus:v2.54.1
