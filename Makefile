@@ -1,6 +1,8 @@
 COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: all clean up down restart logs test test-path test-cov lint check migrate migrate-new nuke
+LOADTEST_TARGET_URL ?= http://192.168.0.101
+
+.PHONY: all clean up down restart logs loadtest-path test test-path test-cov lint check migrate migrate-new nuke
 
 all: up
 
@@ -17,6 +19,13 @@ restart:
 
 logs:
 	$(COMPOSE) logs -f
+
+loadtest-path:
+	docker run --rm -i \
+		-v $(PWD):/project \
+		-w /project \
+		-e LOADTEST_TARGET_URL=$(LOADTEST_TARGET_URL) \
+		grafana/k6:latest run $(filter-out $@,$(MAKECMDGOALS))
 
 test:
 	$(COMPOSE) exec -e TESTING=true api uv run pytest -v -p no:xdist

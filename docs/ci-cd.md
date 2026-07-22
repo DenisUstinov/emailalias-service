@@ -53,6 +53,7 @@ gh secret set BEGET_PASSWORD --body "$BEGET_PASSWORD" --env "$ENV_NAME"
 # Сохраняем обычные настройки проекта (названия, порты, ссылки) в переменные GitHub
 gh variable set BACKEND_CORS_ORIGINS --body "http://localhost:3000" --env "$ENV_NAME"
 gh variable set COMPOSE_PROJECT_NAME --body "emailalias" --env "$ENV_NAME"
+gh variable set LOADTEST_TARGET_URL --body "http://192.168.0.102" --env "$ENV_NAME"
 gh variable set POSTGRES_DB --body "emailalias_db" --env "$ENV_NAME"
 gh variable set POSTGRES_HOST --body "postgres" --env "$ENV_NAME"
 gh variable set POSTGRES_USER --body "postgres" --env "$ENV_NAME"
