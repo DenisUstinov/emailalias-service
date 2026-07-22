@@ -3,7 +3,7 @@ import secrets
 import string
 import uuid
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, NoResultFound
 
 from app.core.config import settings
 from app.core.exceptions import (
@@ -50,13 +50,14 @@ class AliasService:
         domain_id: uuid.UUID,
         local_part: str,
     ) -> AliasCreateResponse:
-        domain = await self.domain_repo.get_by_id_for_update(domain_id)
-        if domain is None:
+        try:
+            domain = await self.domain_repo.get_by_id_for_update(domain_id)
+        except NoResultFound:
             logger.warning(
                 "Alias creation attempt with non-existent domain",
                 extra={"user_id": user_id, "domain_id": domain_id},
             )
-            raise AliasDomainNotFoundError()
+            raise AliasDomainNotFoundError() from None
 
         if not domain.is_default:
             logger.warning(
@@ -123,7 +124,14 @@ class AliasService:
             raise AliasCollisionError() from None
 
     async def provision_alias(self, alias_id: uuid.UUID) -> None:
-        alias = await self.alias_repo.get_by_id(alias_id)
+        try:
+            alias = await self.alias_repo.get_by_id(alias_id)
+        except NoResultFound:
+            logger.warning(
+                "Alias not found, skipping provisioning",
+                extra={"alias_id": str(alias_id)},
+            )
+            return
 
         if alias.status == AliasStatus.ACTIVE:
             logger.info(
@@ -139,7 +147,15 @@ class AliasService:
             )
             return
 
-        user = await self.user_repo.get_by_id(alias.user_id)
+        try:
+            user = await self.user_repo.get_by_id(alias.user_id)
+        except NoResultFound:
+            logger.error(
+                "User not found for alias provisioning",
+                extra={"alias_id": str(alias_id), "user_id": str(alias.user_id)},
+            )
+            alias.status = AliasStatus.FAILED
+            return
 
         try:
             await self.mail_provider.provision_alias(alias, user.email)
@@ -156,7 +172,14 @@ class AliasService:
         logger.info("Alias provisioned and activated", extra={"alias_id": str(alias_id)})
 
     async def update_forwarding_email(self, alias_id: uuid.UUID) -> None:
-        alias = await self.alias_repo.get_by_id(alias_id)
+        try:
+            alias = await self.alias_repo.get_by_id(alias_id)
+        except NoResultFound:
+            logger.warning(
+                "Alias not found, skipping forwarding update",
+                extra={"alias_id": str(alias_id)},
+            )
+            return
 
         if alias.status != AliasStatus.ACTIVE:
             logger.info(
@@ -165,7 +188,14 @@ class AliasService:
             )
             return
 
-        user = await self.user_repo.get_by_id(alias.user_id)
+        try:
+            user = await self.user_repo.get_by_id(alias.user_id)
+        except NoResultFound:
+            logger.error(
+                "User not found for forwarding update",
+                extra={"alias_id": str(alias_id), "user_id": str(alias.user_id)},
+            )
+            return
 
         try:
             await self.mail_provider.update_forwarding_email(alias, user.email)
@@ -184,7 +214,14 @@ class AliasService:
         await self.alias_repo.delete(alias_id, user_id)
 
     async def deprovision_alias(self, alias_id: uuid.UUID) -> None:
-        alias = await self.alias_repo.get_by_id(alias_id)
+        try:
+            alias = await self.alias_repo.get_by_id(alias_id)
+        except NoResultFound:
+            logger.warning(
+                "Alias not found, skipping deprovisioning",
+                extra={"alias_id": str(alias_id)},
+            )
+            return
 
         if alias.status != AliasStatus.DELETED:
             logger.info(

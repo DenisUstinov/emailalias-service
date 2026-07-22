@@ -19,7 +19,7 @@ class DomainRepository:
         result = await self.session.execute(stmt)
         return result.scalar_one()
 
-    async def get_by_id_for_update(self, domain_id: uuid.UUID) -> Domain | None:
+    async def get_by_id_for_update(self, domain_id: uuid.UUID) -> Domain:
         stmt = select(Domain).where(Domain.id == domain_id).with_for_update()
         result = await self.session.execute(stmt)
-        return result.scalar_one_or_none()
+        return result.scalar_one()
