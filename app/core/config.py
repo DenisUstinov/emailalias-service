@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     BEGET_PASSWORD: SecretStr = Field(..., min_length=1)
 
     # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_DEFAULT: str = "60/minute"
     RATE_LIMIT_TOKEN_CREATION: str = "5/minute"
     RATE_LIMIT_VERIFICATION_CREATION: str = "3/minute"
