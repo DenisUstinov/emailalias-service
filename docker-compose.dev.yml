@@ -7,6 +7,7 @@ services:
       - ./app:/app/app
       - ./migrations:/app/migrations
       - ./tests:/app/tests
+      - ./load-tests:/app/load-tests
     env_file:
       - .env
 

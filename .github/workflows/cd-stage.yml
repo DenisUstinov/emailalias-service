@@ -15,7 +15,7 @@ jobs:
     runs-on: self-hosted
     environment: staging
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    timeout-minutes: 15
+    timeout-minutes: 60
 
     defaults:
       run:
@@ -27,6 +27,7 @@ jobs:
       BEGET_LOGIN: ${{ secrets.BEGET_LOGIN }}
       BEGET_PASSWORD: ${{ secrets.BEGET_PASSWORD }}
       COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME }}
+      LOADTEST_TARGET_URL: ${{ vars.LOADTEST_TARGET_URL }}
       POSTGRES_DB: ${{ vars.POSTGRES_DB }}
       POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
       POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
@@ -44,8 +45,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Stop previous stack
-        run: docker compose -f docker-compose.yml -f docker-compose.stage.yml down || true
+      - name: Clean previous stack and volumes
+        run: docker compose -f docker-compose.yml -f docker-compose.stage.yml down -v || true
 
       - name: Deploy stack
         run: docker compose -f docker-compose.yml -f docker-compose.stage.yml up -d --build --wait
@@ -53,10 +54,62 @@ jobs:
       - name: Run database migrations
         run: docker compose -f docker-compose.yml -f docker-compose.stage.yml exec -T api alembic upgrade head
 
-      - name: Run k6 stress tests
-        uses: grafana/k6-action@v0.3.1
-        with:
-          filename: |
-            loadtests/unit/verifications.stress.js
-        env:
-          LOADTEST_TARGET_URL: ${{ vars.LOADTEST_TARGET_URL }}
+      - name: Prepare smoke test data
+        run: |
+          for script in load-tests/setup/*.py; do
+            [[ "$script" == *"__init__"* ]] && continue
+            [ -e "$script" ] || continue
+            docker compose -f docker-compose.yml -f docker-compose.stage.yml run --rm --no-deps \
+              -v ${{ github.workspace }}/load-tests:/app/load-tests \
+              -w /app \
+              api python "/app/$script"
+          done
+
+      - name: Run smoke tests
+        run: |
+          set -e
+          for test in load-tests/unit/*.smoke.js; do
+            [ -e "$test" ] || continue
+            docker run --rm -i \
+              -v $(pwd):/project \
+              -w /project \
+              -e LOADTEST_TARGET_URL=${{ env.LOADTEST_TARGET_URL }} \
+              grafana/k6:latest run "$test"
+          done
+
+      - &clean_all
+        name: Clean Redis and Postgres
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.stage.yml exec -T redis redis-cli FLUSHALL
+          docker compose -f docker-compose.yml -f docker-compose.stage.yml exec -T postgres psql -U ${{ env.POSTGRES_USER }} -d ${{ env.POSTGRES_DB }} -c "
+            DO \$\$ DECLARE r RECORD; BEGIN
+              FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+                EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
+              END LOOP;
+            END \$\$;
+          "
+
+      - name: Prepare load test data
+        run: |
+          for script in load-tests/setup/*.py; do
+            [[ "$script" == *"__init__"* ]] && continue
+            [ -e "$script" ] || continue
+            docker compose -f docker-compose.yml -f docker-compose.stage.yml run --rm --no-deps \
+              -v ${{ github.workspace }}/load-tests:/app/load-tests \
+              -w /app \
+              api python "/app/$script" --count 70000
+          done
+
+      - name: Run load tests
+        run: |
+          set -e
+          for test in load-tests/unit/*.load.js; do
+            [ -e "$test" ] || continue
+            docker run --rm -i \
+              -v $(pwd):/project \
+              -w /project \
+              -e LOADTEST_TARGET_URL=${{ env.LOADTEST_TARGET_URL }} \
+              grafana/k6:latest run "$test"
+          done
+
+      - *clean_all

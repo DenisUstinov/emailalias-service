@@ -12,3 +12,7 @@ __pycache__/
 
 # Project logs
 *.log
+
+# Generated load test data
+load-tests/data/*
+!load-tests/data/.gitkeep

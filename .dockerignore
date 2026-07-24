@@ -21,7 +21,7 @@ Makefile
 tests/
 
 # Load testing (пробрасываются через volume в stage)
-loadtests/
+load-tests/
 
 # Infrastructure configuration (пробрасываются через volume)
 nginx/

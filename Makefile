@@ -2,7 +2,7 @@ COMPOSE := docker compose -f docker-compose.yml -f docker-compose.dev.yml
 
 LOADTEST_TARGET_URL ?= http://192.168.0.101
 
-.PHONY: all clean up down restart logs loadtest-path test test-path test-cov lint check migrate migrate-new nuke
+.PHONY: all clean up down restart logs test-path k6-path setup-path test test-cov lint check migrate migrate-new nuke
 
 all: up
 
@@ -20,18 +20,21 @@ restart:
 logs:
 	$(COMPOSE) logs -f
 
-loadtest-path:
+test-path:
+	$(COMPOSE) exec -e TESTING=true api uv run pytest -v -p no:xdist $(filter-out $@,$(MAKECMDGOALS))
+
+k6-path:
 	docker run --rm -i \
 		-v $(PWD):/project \
 		-w /project \
 		-e LOADTEST_TARGET_URL=$(LOADTEST_TARGET_URL) \
 		grafana/k6:latest run $(filter-out $@,$(MAKECMDGOALS))
 
+setup-path:
+	$(COMPOSE) exec -T -e PYTHONPATH=/app api uv run python $(ARGS)
+
 test:
 	$(COMPOSE) exec -e TESTING=true api uv run pytest -v -p no:xdist
-
-test-path:
-	$(COMPOSE) exec -e TESTING=true api uv run pytest -v -p no:xdist $(filter-out $@,$(MAKECMDGOALS))
 
 test-cov:
 	$(COMPOSE) exec -e TESTING=true api uv run pytest -v --cov=app --cov-report=term-missing -p no:xdist

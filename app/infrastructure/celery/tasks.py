@@ -81,7 +81,6 @@ def deprovision_alias_task(self, alias_id: str) -> str:
     autoretry_for=(ExternalProviderUnavailableError,),
     retry_backoff=True,
     max_retries=3,
-    rate_limit="1/s",
     priority=9,
 )
 def send_otp_task(self, destination: str, verification_id: str) -> None:
